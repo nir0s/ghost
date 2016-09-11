@@ -1,0 +1,13 @@
+paths:
+    -   type: mock_VERSION
+        path: multiple
+        excluded:
+            - multiple/excluded
+        base_directory: tests/resources/
+        match: '"version": "\d+\.\d+(\.\d+)?(-\w\d+)?'
+        replace: \d+\.\d+(\.\d+)?(-\w\d+)?
+        with: "{{ .version }}"
+        must_include:
+            - date
+            - commit
+            - version

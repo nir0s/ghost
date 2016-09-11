@@ -1,0 +1,13 @@
+variables:
+    version: 1.1
+
+files:
+      type: VERSION
+        path: tests/resources/mock_VERSION
+        replace: 3.1.0-m2
+        with: "3.1.0-m3"
+        to_file: tests/resources/mock_VERSION.test
+        must_include:
+            - date
+            - commit
+            - version
