@@ -11,20 +11,21 @@ def read(*parts):
 
 
 setup(
-    name='clu',
-    version="0.1.0",
-    url='https://github.com/nir0s/clu',
+    name='ghost',
+    version="0.1.1",
+    url='https://github.com/nir0s/ghost',
     author='nir0s',
     author_email='nir36g@gmail.com',
     license='LICENSE',
     platforms='All',
-    description='Clu is a secret store.',
+    description='Ghost stores your secrets where no one can see',
     long_description=read('README.rst'),
-    packages=['clu'],
-    entry_points={'console_scripts': ['clu = clu.clu:main']},
+    py_modules=['ghost'],
+    entry_points={'console_scripts': ['ghost = ghost:main']},
     install_requires=[
-        "pyyaml==3.10",
         "click==6.6",
+        "tinydb==3.2.1",
+        "simple-crypt==4.1.7"
     ],
     classifiers=[
         'Programming Language :: Python',
