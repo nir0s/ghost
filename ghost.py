@@ -186,20 +186,18 @@ class Stash(_BaseStash):
                  db_path=DEFAULT_STASH_PATH,
                  passphrase=None,
                  passphrase_size=12):
-        db_path = os.path.expanduser(db_path)
-        if not os.path.isdir(os.path.dirname(db_path)):
-            os.makedirs(os.path.dirname(db_path))
+        self.db_path = os.path.expanduser(db_path)
+        if not os.path.isdir(os.path.dirname(self.db_path)):
+            os.makedirs(os.path.dirname(self.db_path))
 
         self.db = TinyDB(
-            db_path,
+            self.db_path,
             indent=4,
             sort_keys=True,
             separators=(',', ': '))
         self.passphrase = passphrase or generate_passphrase(passphrase_size)
 
     def init(self):
-        if os.path.isfile(db_path):
-            raise GhostError('Stash already initialized')
         if not isinstance(self.passphrase, basestring) or not self.passphrase:
             raise GhostError('passphrase must be a non-empty string')
 
@@ -398,10 +396,12 @@ def init_stash(stash_path, passphrase, passphrase_size):
     a default path will be used.
     """
     logger.info('Initializing stash...')
-    stash = Stash(db_path=expanded_path, passphrase=passphrase)
-    stash.init()
+    stash = Stash(db_path=stash_path, passphrase=passphrase)
+    passphrase = stash.init()
     logger.info('Initalized stash at: {0}'.format(stash_path))
     logger.info('Your passphrase is: {0}'.format(passphrase))
+    logger.info('Make sure you save your passphrase somewhere safe. '
+                'If lost, any access to your stash will be impossible.')
 
 
 @main.command(name='put', short_help='Insert a key to the stash')
