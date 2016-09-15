@@ -69,14 +69,15 @@ class _BaseStash(object):
         """
         value = json.dumps(value)
         encrypted_value = encrypt(self.passphrase, value.encode('utf8'))
-        hexified_value = binascii.hexlify(encrypted_value)
+        hexified_value = binascii.hexlify(encrypted_value).decode('ascii')
         return hexified_value
 
     def _decrypt(self, hexified_value):
         """The exact opposite of _encrypt
         """
         encrypted_value = binascii.unhexlify(hexified_value)
-        jsonified_value = decrypt(self.passphrase, encrypted_value)
+        jsonified_value = \
+            decrypt(self.passphrase, encrypted_value).decode('ascii')
         value = json.loads(jsonified_value)
         return value
 
@@ -199,7 +200,7 @@ class Stash(_BaseStash):
         self.passphrase = passphrase or generate_passphrase(passphrase_size)
 
     def init(self):
-        if not isinstance(self.passphrase, basestring) or not self.passphrase:
+        if not isinstance(self.passphrase, str) or not self.passphrase:
             raise GhostError('passphrase must be a non-empty string')
 
         self.put(key='stored_passphrase', value=self.passphrase)
@@ -373,6 +374,7 @@ passphrase_option = click.option(
     '-p',
     '--passphrase',
     envvar='GHOST_PASSPHRASE',
+    type=click.STRING,
     required=True,
     help='Stash Passphrase (Can be set via the `GHOST_PASSPHRASE` '
     'env var)')
@@ -384,6 +386,7 @@ passphrase_option = click.option(
                 default=DEFAULT_STASH_PATH)
 @click.option('-p',
               '--passphrase',
+              type=click.STRING,
               default=None,
               help='Path to the stash')
 @click.option('-s',
