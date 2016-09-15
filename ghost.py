@@ -65,7 +65,11 @@ def setup_logger():
 logger = setup_logger()
 
 
-class _BaseStash(object):
+class Stash(object):
+    def __init__(self, storage, passphrase=None, passphrase_size=12):
+        self._storage = storage
+        self.passphrase = passphrase or generate_passphrase(passphrase_size)
+
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
 
@@ -103,9 +107,9 @@ class _BaseStash(object):
         return value
 
     def _handle_existing_key(self, key, modify):
-        existing_key = self._get(key) or {}
+        existing_key = self._storage.get(key) or {}
         if existing_key and modify:
-            self.delete(key)
+            self._storage.delete(key)
         elif existing_key:
             raise GhostError(
                 'The key already exists. Use the modify flag to overwrite')
@@ -113,6 +117,14 @@ class _BaseStash(object):
             raise GhostError(
                 "The key doesn't exist and therefore cannot be modified")
         return existing_key
+
+    def init(self):
+        if not isinstance(self.passphrase, basestring) or not self.passphrase:
+            raise GhostError('passphrase must be a non-empty string')
+
+        self._storage.init()
+        self.put(key='stored_passphrase', value=self.passphrase)
+        return self.passphrase
 
     def put(self,
             key,
@@ -169,12 +181,12 @@ class _BaseStash(object):
             modified_at=modified_at,
             metadata=metadata,
             uid=uid)
-        return self._put(record)
+        return self._storage.put(record)
 
     def get(self, key, decrypt=True):
         """Return a key with its parameters if it was found.
         """
-        record = self._get(key)
+        record = self._storage.get(key)
         if not record.get('value'):
             return None
         if decrypt:
@@ -184,106 +196,106 @@ class _BaseStash(object):
     def delete(self, key):
         """Delete a key if it exists.
         """
-        record = self._get(key)
-        if not record:
+        deleted = self._storage.delete(key)
+        if not deleted:
             raise GhostError('Key {0} not found'.format(key))
-        self._delete(key)
 
     def list(self):
         """Return a list of all keys.
         """
-        return [result['name'] for result in self._list()
+        return [result['name'] for result in self._storage.list()
                 if result['name'] != 'stored_passphrase']
 
     def get_metadata(self, key):
         """Returns the metadata for a key.
         """
-        record = self._get(key)
+        record = self._storage.get(key)
         if not record:
             return None
         return record.get('metadata') or {}
 
 
-class Stash(_BaseStash):
-    def __init__(self,
-                 db_path=DEFAULT_STASH_PATH,
-                 passphrase=None,
-                 passphrase_size=12):
+class TinyDBStorage(object):
+    def __init__(self, db_path=DEFAULT_STASH_PATH):
         self.db_path = os.path.expanduser(db_path)
+        self._db = None
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = TinyDB(
+                self.db_path,
+                indent=4,
+                sort_keys=True,
+                separators=(',', ': '))
+        return self._db
+
+    def init(self):
         if not os.path.isdir(os.path.dirname(self.db_path)):
             os.makedirs(os.path.dirname(self.db_path))
 
-        self.db = TinyDB(
-            self.db_path,
-            indent=4,
-            sort_keys=True,
-            separators=(',', ': '))
-        self.passphrase = passphrase or generate_passphrase(passphrase_size)
-
-    def init(self):
-        if not isinstance(self.passphrase, basestring) or not self.passphrase:
-            raise GhostError('passphrase must be a non-empty string')
-
-        self.put(key='stored_passphrase', value=self.passphrase)
-        return self.passphrase
-
-    def _put(self, record):
+    def put(self, record):
         return self.db.insert(record)
 
-    def _list(self):
+    def list(self):
         return self.db.search(Query().name.matches('.*'))
 
-    def _get(self, key):
+    def get(self, key):
         result = self.db.search(Query().name == key)
         if not result:
             return {}
         return result[0]
 
-    def _delete(self, key):
-        self.db.remove(Query().name == key)
+    def delete(self, key):
+        return self.db.remove(Query().name == key)
 
 
-class SqlStash(_BaseStash):
+class SQLAlchemyStorage(object):
     def __init__(self,
                  db_path=DEFAULT_SQLITE_STASH_PATH,
                  passphrase=None,
                  passphrase_size=12):
         if not SQLALCHEMY_EXISTS:
-            raise ImportError('SQL Alchemy must be installed first')
-        # More on connection strings for sqlalchemy:
-        # http://docs.sqlalchemy.org/en/latest/core/engines.html
-        if 'sqlite://' in db_path:
-            path = os.path.expanduser(db_path).split('://')[1]
-            if not os.path.isdir(os.path.dirname(path)):
-                os.makedirs(os.path.dirname(path))
-        self.db = create_engine(db_path)
-        metadata = MetaData(bind=self.db)
+            raise ImportError('SQLAlchemy must be installed first')
+        self.db_path = db_path
+        self.metadata = MetaData()
 
         self.keys = Table(
             'keys',
-            metadata,
+            self.metadata,
             Column('name', String, primary_key=True),
             Column('value', String),
             Column('description', String),
             Column('metadata', PickleType),
             Column('modified_at', String),
             Column('created_at', String))
-        metadata.create_all()
 
-        self.passphrase = passphrase or generate_passphrase(
-            size=passphrase_size)
+        self._db = None
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = create_engine(self.db_path)
+        return self._db
 
     def init(self):
-        self.put(key='stored_passphrase', value=self.passphrase)
-        return self.passphrase
+        if 'sqlite://' in self.db_path:
+            path = os.path.expanduser(self.db_path).split('://')[1]
+            if not os.path.isdir(os.path.dirname(path)):
+                os.makedirs(os.path.dirname(path))
 
-    def _put(self, record):
+        # More on connection strings for sqlalchemy:
+        # http://docs.sqlalchemy.org/en/latest/core/engines.html
+        self.metadata.bind = self.db
+        self.metadata.create_all()
+
+    def put(self, record):
         return self.db.execute(self.keys.insert(), **record).lastrowid
 
-    def _list(self):
+    def list(self):
         return self.db.execute(sql.select([self.keys]))
 
-    def _get(self, key):
+    def get(self, key):
         results = self.db.execute(sql.select(
             [self.keys], self.keys.c.name == key))
 
@@ -301,8 +313,10 @@ class SqlStash(_BaseStash):
             record.update({column.name: value})
         return record
 
-    def _delete(self, key):
-        self.db.execute(self.keys.delete().where(self.keys.c.name == key))
+    def delete(self, key):
+        result = self.db.execute(
+            self.keys.delete().where(self.keys.c.name == key))
+        return result.rowcount > 0
 
 
 def _get_current_time():
@@ -410,7 +424,7 @@ passphrase_option = click.option(
               default=None,
               type=click.UNPROCESSED,
               help='Path to the stash')
-@click.option('-s',
+@click.option('-z',
               '--passphrase-size',
               default=12)
 def init_stash(stash_path, passphrase, passphrase_size):
@@ -420,7 +434,8 @@ def init_stash(stash_path, passphrase, passphrase_size):
     a default path will be used.
     """
     logger.info('Initializing stash...')
-    stash = Stash(db_path=stash_path, passphrase=passphrase)
+    storage = TinyDBStorage(db_path=stash_path)
+    stash = Stash(storage, passphrase=passphrase)
     passphrase = stash.init()
     logger.info('Initalized stash at: {0}'.format(stash_path))
     logger.info('Your passphrase is: {0}'.format(passphrase))
@@ -459,7 +474,8 @@ def put_key(key,
     `KEY` is the name of the key to insert
     """
     logger.info('Stashing key in {0}...'.format(stash))
-    stash = Stash(db_path=stash, passphrase=passphrase)
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
             key=key,
@@ -487,7 +503,8 @@ def get_key(key, stash, passphrase, jsonify):
     """
     if not jsonify:
         logger.info('Retrieving key from {0}...'.format(stash))
-    stash = Stash(db_path=stash, passphrase=passphrase)
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key=key)
     if not record:
         sys.exit('Key {0} not found'.format(key))
@@ -507,7 +524,8 @@ def delete_key(key, stash, passphrase):
     `KEY` is the name of the key to delete
     """
     logger.info('Deleting key from stash {0}...'.format(stash))
-    stash = Stash(db_path=stash, passphrase=passphrase)
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
     try:
         stash.delete(key=key)
     except GhostError as ex:
@@ -521,7 +539,8 @@ def list_keys(stash, passphrase):
     """List all keys in the stash
     """
     logger.info('Listing all keys in {0}...'.format(stash))
-    stash = Stash(db_path=stash, passphrase=passphrase)
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
     if not keys:
         logger.info('The stash is empty. Go on, put some keys in there...')
