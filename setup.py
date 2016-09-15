@@ -12,7 +12,7 @@ def read(*parts):
 
 setup(
     name='ghost',
-    version="0.1.3",
+    version="0.1.4",
     url='https://github.com/nir0s/ghost',
     author='nir0s',
     author_email='nir36g@gmail.com',

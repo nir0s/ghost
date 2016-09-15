@@ -128,7 +128,8 @@ class _BaseStash(object):
 
         if not value and not existing_key.get('value'):
             raise GhostError('You must provide a value for new keys')
-
+        # TODO: Treat a case in which we try to update an existing key
+        # but don't provide a value in which nothing will happen.
         created_at = existing_key.get('created_at') or _get_current_time()
         uid = existing_key.get('uid') or str(uuid.uuid4())
 
@@ -233,7 +234,7 @@ class SqlStash(_BaseStash):
             path = os.path.expanduser(db_path).split('://')[1]
             if not os.path.isdir(os.path.dirname(path)):
                 os.makedirs(os.path.dirname(path))
-        self.db = create_engine(db_path, echo=True)
+        self.db = create_engine(db_path)
         metadata = MetaData(bind=self.db)
 
         self.keys = Table(
