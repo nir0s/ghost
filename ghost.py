@@ -379,16 +379,15 @@ passphrase_option = click.option(
 
 @main.command(name='init', short_help='Init a stash')
 @click.argument('STASH_PATH',
-                envvar='GHOST_STASH_PATH',
                 required=False,
                 default=DEFAULT_STASH_PATH)
 @click.option('-p',
               '--passphrase',
-              envvar='GHOST_PASSPHRASE',
               default=None,
-              help='Path to the stash (Can be set via the '
-              '`GHOST_STASH_PATH` env var)')
-@click.option('-s', '--passphrase-size', default=12)
+              help='Path to the stash')
+@click.option('-s',
+              '--passphrase-size',
+              default=12)
 def init_stash(stash_path, passphrase, passphrase_size):
     """Init a stash
 
@@ -436,12 +435,15 @@ def put_key(key,
     """
     logger.info('Stashing key in {0}...'.format(stash))
     stash = Stash(db_path=stash, passphrase=passphrase)
-    stash.put(
-        key=key,
-        value=_build_dict_from_key_value(val),
-        modify=modify,
-        metadata=_build_dict_from_key_value(meta),
-        description=description)
+    try:
+        stash.put(
+            key=key,
+            value=_build_dict_from_key_value(val),
+            modify=modify,
+            metadata=_build_dict_from_key_value(meta),
+            description=description)
+    except GhostError as ex:
+        sys.exit(ex)
 
 
 @main.command(name='get', short_help='Retrieve a key from the stash')
@@ -463,7 +465,7 @@ def get_key(key, stash, passphrase, jsonify):
     stash = Stash(db_path=stash, passphrase=passphrase)
     record = stash.get(key=key)
     if not record:
-        sys.exit('Key not found')
+        sys.exit('Key {0} not found'.format(key))
     if jsonify:
         logger.info(json.dumps(record, indent=4, sort_keys=False))
     else:
