@@ -25,7 +25,7 @@ setup(
     install_requires=[
         "click==6.6",
         "tinydb==3.2.1",
-        "simple-crypt==4.1.7"
+        "cryptography>=1.5"
     ],
     classifiers=[
         'Programming Language :: Python',
