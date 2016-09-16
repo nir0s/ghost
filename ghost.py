@@ -22,6 +22,7 @@ import sys
 import json
 import time
 import uuid
+import base64
 import random
 import string
 import logging
@@ -30,7 +31,10 @@ from datetime import datetime
 
 import click
 from tinydb import TinyDB, Query
-from simplecrypt import encrypt, decrypt
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 try:
     from sqlalchemy import (Column,
                             Table,
@@ -63,12 +67,30 @@ logger = setup_logger()
 
 class _BaseStash(object):
     # TODO: Consider base64 encoding instead of hexlification
+    _key = None
+
+    @property
+    def key(self):
+        if self._key is None:
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt='ghost',
+                iterations=1000000,
+                backend=default_backend())
+            self._key = base64.urlsafe_b64encode(kdf.derive(self.passphrase))
+        return self._key
+
+    @property
+    def cipher(self):
+        return Fernet(self.key)
+
     def _encrypt(self, value):
         """Turn a json serializable value into an jsonified, encrypted,
         hexa string.
         """
         value = json.dumps(value)
-        encrypted_value = encrypt(self.passphrase, value.encode('utf8'))
+        encrypted_value = self.cipher.encrypt(value.encode('utf8'))
         hexified_value = binascii.hexlify(encrypted_value)
         return hexified_value
 
@@ -76,7 +98,7 @@ class _BaseStash(object):
         """The exact opposite of _encrypt
         """
         encrypted_value = binascii.unhexlify(hexified_value)
-        jsonified_value = decrypt(self.passphrase, encrypted_value)
+        jsonified_value = self.cipher.decrypt(encrypted_value)
         value = json.loads(jsonified_value)
         return value
 
@@ -374,6 +396,7 @@ passphrase_option = click.option(
     '--passphrase',
     envvar='GHOST_PASSPHRASE',
     required=True,
+    type=click.UNPROCESSED,
     help='Stash Passphrase (Can be set via the `GHOST_PASSPHRASE` '
     'env var)')
 
@@ -385,6 +408,7 @@ passphrase_option = click.option(
 @click.option('-p',
               '--passphrase',
               default=None,
+              type=click.UNPROCESSED,
               help='Path to the stash')
 @click.option('-s',
               '--passphrase-size',
