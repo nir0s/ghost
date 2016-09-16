@@ -280,7 +280,7 @@ class SqlStash(_BaseStash):
         return record
 
     def _delete(self, key):
-        self.db.execute(self.keys.delete(), name=key)
+        self.db.execute(self.keys.delete().where(self.keys.c.name == key))
 
 
 def _get_current_time():
