@@ -123,7 +123,9 @@ class Stash(object):
             raise GhostError('passphrase must be a non-empty string')
 
         self._storage.init()
-        self.put(key='stored_passphrase', value=self.passphrase)
+        self.put(
+            key='stored_passphrase',
+            value={'passphrase': self.passphrase})
         return self.passphrase
 
     def put(self,
