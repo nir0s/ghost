@@ -157,6 +157,8 @@ class Stash(object):
 
         Returns the id of the record in the database
         """
+        if value and not isinstance(value, dict):
+            raise GhostError('Value must be of type dict')
         # `existing_key` will be an empty dict if it doesn't exist
         existing_key = self._handle_existing_key(key, modify)
 
@@ -212,7 +214,15 @@ class Stash(object):
         record = self._storage.get(key)
         if not record:
             return None
-        return record.get('metadata') or {}
+        return record.get('metadata', {})
+
+    def get_value(self, key):
+        """Returns the value for a key.
+        """
+        record = self._storage.get(key)
+        if not record:
+            return None
+        return record.get('value', {})
 
 
 class TinyDBStorage(object):
@@ -424,8 +434,7 @@ passphrase_option = click.option(
               default=None,
               type=click.UNPROCESSED,
               help='Path to the stash')
-@click.option('-z',
-              '--passphrase-size',
+@click.option('--passphrase-size',
               default=12)
 def init_stash(stash_path, passphrase, passphrase_size):
     """Init a stash

@@ -136,15 +136,22 @@ NOTE: `--passphrase` and `--stash` can be supplied via the `GHOST_STASH_PATH` an
 import ghost
 
 # Initialize a new stash
-stash = ghost.Stash(path='~/.ghost/stash.json', phrase='P!3pimp5i31')
+storage = TinyDBStorage(db_path='~/.ghost/stash.json')
+stash = Stash(storage, passphrase='P!3pimp5i31')
+stash.init()
 
 # Insert a key
 stash.put(key='aws', value={'secret': 'my_secret', access: 'my_access'})
 # Get the key
 key = stash.get(key='aws')
+print(key)
+...
 
 # List all keys in a stash
 stash.list()
+
+# Delete a key
+stash.delete('aws')
 ```
 
 ## Backends
@@ -160,16 +167,11 @@ I'd like to also support Vault in addition to KMS and any other cloud provider b
 
 ## Encryption & Decryption
 
-Encryption is done using [simple-crypt](https://github.com/andrewcooke/simple-crypt). It is done only on values and these are saved in hexa. Keys are left in plain text.
+Encryption is done using [cryptography](https://cryptography.io/en/latest/). It is done only on values and these are saved in hexa. Keys are left in plain text.
 
 Values are encrypted once provided and are decrypted only upon request, meaning that they're only available in memory for a very short period of time.
 
-See [simple-crypt's](https://github.com/andrewcooke/simple-crypt) documentation for additional information.
-
-### Performance
-
-Note that simple-crypt (via PBKDF) adds some sleep time to prevent brute force attacks so it will take about 1.5 seconds for either processes to take place.
-
+See [cryptography](https://cryptography.io/en/latest/) documentation for additional information.
 
 ## Testing
 
