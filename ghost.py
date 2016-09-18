@@ -280,7 +280,7 @@ class SQLAlchemyStorage(object):
             'keys',
             self.metadata,
             Column('name', String, primary_key=True),
-            Column('value', String),
+            Column('value', PickleType),
             Column('description', String),
             Column('metadata', PickleType),
             Column('modified_at', String),
@@ -367,12 +367,12 @@ def _build_dict_from_key_value(keys_and_values):
     return record
 
 
-def _pretty_format_dict(record):
-    """Return a human readable format of a record.
+def _prettify_dict(record):
+    """Return a human readable format of a record (dict).
 
     Example:
 
-    Description:   asdadsadsasd
+    Description:   My Wonderful Key
     Uid:           a54d6de1-922a-4998-ad34-cb838646daaa
     Created_At:    2016-09-15T12:42:32
     Metadata:      owner=me;
@@ -391,7 +391,7 @@ def _pretty_format_dict(record):
     return pretty_record
 
 
-def _pretty_format_list(items):
+def _prettify_list(items):
     """Return a human readable format of a list.
 
     Example:
