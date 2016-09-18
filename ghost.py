@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # TODO: Add categories
-# TODO: export and import
-# TODO: Add filters to listing according to any field using regex
+# TODO: export and import from one storage to another
+# TODO: Add filters to allow listing according to any field using regex
 
 
 import os
@@ -219,15 +219,13 @@ class Stash(object):
         """Returns the metadata for a key.
         """
         record = self._storage.get(key)
-        if not record:
-            return None
-        return record.get('metadata')
+        return record['metadata'] if record else None
 
     def get_value(self, key):
         """Returns the value for a key.
         """
         record = self._storage.get(key)
-        return record.get('value') if record else None
+        return self._decrypt(record['value']) if record else None
 
 
 class TinyDBStorage(object):
@@ -301,7 +299,9 @@ class SQLAlchemyStorage(object):
             path = os.path.expanduser(self.db_path).split('://')[1]
             if not os.path.isdir(os.path.dirname(path)):
                 os.makedirs(os.path.dirname(path))
-
+            elif os.path.isfile(path):
+                raise GhostError('Stash {0} already initialized'.format(
+                    path))
         # More on connection strings for sqlalchemy:
         # http://docs.sqlalchemy.org/en/latest/core/engines.html
         self.metadata.bind = self.db
@@ -531,7 +531,7 @@ def get_key(key, jsonify, stash, passphrase):
     if jsonify:
         logger.info(json.dumps(record, indent=4, sort_keys=False))
     else:
-        logger.info('\n' + _pretty_format_dict(record))
+        logger.info('\n' + _prettify_dict(record))
 
 
 @main.command(name='delete', short_help='Delete a key from the stash')
@@ -565,4 +565,4 @@ def list_keys(stash, passphrase):
     if not keys:
         logger.info('The stash is empty. Go on, put some keys in there...')
         return
-    logger.info(_pretty_format_list(keys))
+    logger.info(_prettify_list(keys))
