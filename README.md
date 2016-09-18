@@ -62,6 +62,7 @@ $ ghost init
 Initializing stash...
 Initialized stash at: /home/nir0s/.ghost/stash.json
 Your passphrase is: qVqkxQ1UfP9s
+Make sure you save your passphrase somewhere safe. If lost, any access to your stash will be impossible.
 ...
 
 $ export GHOST_STASH_PATH='~/my_stash.json'

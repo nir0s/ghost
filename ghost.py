@@ -27,6 +27,7 @@ import random
 import string
 import logging
 import binascii
+import warnings
 from datetime import datetime
 
 import click
@@ -94,7 +95,9 @@ class Stash(object):
         hexa string.
         """
         value = json.dumps(value)
-        encrypted_value = self.cipher.encrypt(value.encode('utf8'))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            encrypted_value = self.cipher.encrypt(value.encode('utf8'))
         hexified_value = binascii.hexlify(encrypted_value)
         return hexified_value
 
@@ -102,7 +105,9 @@ class Stash(object):
         """The exact opposite of _encrypt
         """
         encrypted_value = binascii.unhexlify(hexified_value)
-        jsonified_value = self.cipher.decrypt(encrypted_value)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            jsonified_value = self.cipher.decrypt(encrypted_value)
         value = json.loads(jsonified_value)
         return value
 
@@ -216,15 +221,13 @@ class Stash(object):
         record = self._storage.get(key)
         if not record:
             return None
-        return record.get('metadata', {})
+        return record.get('metadata')
 
     def get_value(self, key):
         """Returns the value for a key.
         """
         record = self._storage.get(key)
-        if not record:
-            return None
-        return record.get('value', {})
+        return record.get('value') if record else None
 
 
 class TinyDBStorage(object):
@@ -245,6 +248,9 @@ class TinyDBStorage(object):
     def init(self):
         if not os.path.isdir(os.path.dirname(self.db_path)):
             os.makedirs(os.path.dirname(self.db_path))
+        elif os.path.isfile(self.db_path):
+            raise GhostError('Stash {0} already initialized'.format(
+                self.db_path))
 
     def put(self, record):
         return self.db.insert(record)
@@ -447,16 +453,19 @@ def init_stash(stash_path, passphrase, passphrase_size):
     logger.info('Initializing stash...')
     storage = TinyDBStorage(db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
-    passphrase = stash.init()
+    try:
+        passphrase = stash.init()
+    except GhostError as ex:
+        sys.exit(ex)
     logger.info('Initalized stash at: {0}'.format(stash_path))
     logger.info('Your passphrase is: {0}'.format(passphrase))
     logger.info('Make sure you save your passphrase somewhere safe. '
-                'If lost, any access to your stash will be impossible.')
+                'If lost, you will lose access to your stash.')
 
 
 @main.command(name='put', short_help='Insert a key to the stash')
 @click.argument('key')
-@click.option('--val',
+@click.option('--value',
               multiple=True,
               help='`key=value` pairs to encrypt '
               '(Can be used multiple times)')
@@ -474,23 +483,23 @@ def init_stash(stash_path, passphrase, passphrase_size):
 @stash_option
 @passphrase_option
 def put_key(key,
-            val,
-            stash,
-            passphrase,
-            modify,
+            value,
+            description,
             meta,
-            description):
+            modify,
+            stash,
+            passphrase):
     """Insert a key to the stash
 
     `KEY` is the name of the key to insert
     """
-    logger.info('Stashing key in {0}...'.format(stash))
+    logger.info('Stashing key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
             key=key,
-            value=_build_dict_from_key_value(val),
+            value=_build_dict_from_key_value(value),
             modify=modify,
             metadata=_build_dict_from_key_value(meta),
             description=description)
@@ -504,16 +513,16 @@ def put_key(key,
               '--jsonify',
               is_flag=True,
               default=False,
-              help='Output in JSON')
+              help='Output in JSON instead')
 @stash_option
 @passphrase_option
-def get_key(key, stash, passphrase, jsonify):
+def get_key(key, jsonify, stash, passphrase):
     """Retrieve a key from the stash
 
     `KEY` is the name of the key to retrieve
     """
     if not jsonify:
-        logger.info('Retrieving key from {0}...'.format(stash))
+        logger.info('Retrieving key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key=key)
@@ -534,7 +543,7 @@ def delete_key(key, stash, passphrase):
 
     `KEY` is the name of the key to delete
     """
-    logger.info('Deleting key from stash {0}...'.format(stash))
+    logger.info('Deleting key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
