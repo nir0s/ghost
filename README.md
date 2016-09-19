@@ -47,15 +47,22 @@ NOTE: The CLI currently only supports working with the TinyDB backend. To use th
 $ ghost
 Usage: ghost [OPTIONS] COMMAND [ARGS]...
 
+  Ghost generates a secret-store in which you can keep your secrets
+  encrypted. Ghost isn't real. It's just in your head.
+
 Options:
   -h, --help  Show this message and exit.
 
 Commands:
   delete  Delete a key from the stash
+  export  Export all keys to a file
   get     Retrieve a key from the stash
   init    Init a stash
   list    List all keys in the stash
+  load    Loads all keys from an exported key file to...
+  purge   Purge the stash from all of its keys
   put     Insert a key to the stash
+
 
 
 $ ghost init
@@ -72,9 +79,9 @@ $ ghost list
 Listing all keys in ~/my_stash.json...
 The stash is empty. Go on, put some keys in there...
 
-$ ghost put aws --val secret=my_secret --val access=my_access
+$ ghost put aws secret=my_secret access=my_access
 Stashing key in ~/my_stash.json...
-$ ghost put gcp --val token=my_token --description "GCP Token" --meta Owner=Me --meta Exp=15.06.17
+$ ghost put gcp token=my_token --description "GCP Token" --meta Owner=Me --meta Exp=15.06.17
 ...
 
 $ ghost get aws
@@ -104,7 +111,7 @@ $ ghost get gcp -j
     "name": "gcp"
 }
 
-$ ghost put gcp --val token=my_modified_token --modify
+$ ghost put gcp token=my_modified_token --modify
 Stashing key in ~/my_stash.json...
 
 $ ghost get gcp

@@ -397,11 +397,11 @@ class SQLAlchemyStorage(object):
 
 
 def _get_current_time():
-    """Returns a unix timestamp formatted string
+    """Returns a human readable unix timestamp formatted string
 
-    e.g. 2015-06-11T10:10:01
+    e.g. 2015-06-11 10:10:01
     """
-    return datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S')
+    return datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def generate_passphrase(size=12):
@@ -535,10 +535,7 @@ def init_stash(stash_path, passphrase, passphrase_size):
 
 @main.command(name='put', short_help='Insert a key to the stash')
 @click.argument('KEY_NAME')
-@click.option('--value',
-              multiple=True,
-              help='`key=value` pairs to encrypt '
-              '(Can be used multiple times)')
+@click.argument('VALUE', nargs=-1)
 @click.option('-d',
               '--description',
               help="The key's description")
@@ -562,6 +559,9 @@ def put_key(key_name,
     """Insert a key to the stash
 
     `KEY_NAME` is the name of the key to insert
+
+    `VALUE` is a key=value argument which can be provided multiple times.
+    it is the encrypted value of your key
     """
     logger.info('Stashing key...')
     storage = TinyDBStorage(db_path=stash)
