@@ -584,7 +584,7 @@ def get_key(key_name, jsonify, stash, passphrase):
         logger.info('Retrieving key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
-    record = stash.get(key=key_name)
+    record = stash.get(key_name=key_name)
     if not record:
         sys.exit('Key {0} not found'.format(key_name))
     if jsonify:
@@ -606,7 +606,7 @@ def delete_key(key_name, stash, passphrase):
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
-        stash.delete(key=key_name)
+        stash.delete(key_name=key_name)
     except GhostError as ex:
         sys.exit(ex)
 

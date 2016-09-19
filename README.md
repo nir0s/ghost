@@ -8,7 +8,7 @@ WIP! No tests yet! Not for use in production! (Well, it depends on what you call
 [![PyPI](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
 [![PypI](http://img.shields.io/pypi/v/ghost.svg)](http://img.shields.io/pypi/v/ghost.svg)
 
-ghost aims to provide a secret store with a single, simple-to-use API supporting multiple backends.
+ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends.
 
 ghost leans on the premise that you might want a single API for both clients and servers to use so the cross-backend nature should provide just that without forcing the user to run a server.
 
@@ -127,6 +127,14 @@ Available Keys:
 $ ghost delete aws
 Deleting key from stash ~/my_stash.json...
 ...
+
+$ ghost purge -f
+Purging stash /home/nir0s/.ghost/stash.json...
+
+$ ghost list
+Listing all keys in ~/my_stash.json...
+The stash is empty. Go on, put some keys in there...
+...
 ```
 
 NOTE: `--passphrase` and `--stash` can be supplied via the `GHOST_STASH_PATH` and `GHOST_PASSPHRASE` env vars.
@@ -173,6 +181,16 @@ Encryption is done using [cryptography](https://cryptography.io/en/latest/). It 
 Values are encrypted once provided and are decrypted only upon request, meaning that they're only available in memory for a very short period of time.
 
 See [cryptography](https://cryptography.io/en/latest/) documentation for additional information.
+
+## Exporting and Importing
+
+You can export and import all keys in a stash using the `ghost export` and `ghost load` commands (same methods in the Python API).
+
+The `export` command allows you to generate a json file containing all keys (encrypted, of course) while the `load` command can then load that file into another stash using the same, or a different storage backend. 
+
+So, for instance, if you have a local implementation using sqlite, you could export all keys; create a new stash using the SQLAlchemy storage for postgre and load all keys into that storage for your server's implementation.
+
+This also enables you to create a backup flow for your keys.
 
 ## Testing
 
