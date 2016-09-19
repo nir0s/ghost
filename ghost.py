@@ -612,19 +612,28 @@ def delete_key(key_name, stash, passphrase):
 
 
 @main.command(name='list')
+@click.option('-j',
+              '--jsonify',
+              is_flag=True,
+              default=False,
+              help='Output in JSON instead')
 @stash_option
 @passphrase_option
-def list_keys(stash, passphrase):
+def list_keys(jsonify, stash, passphrase):
     """List all keys in the stash
     """
-    logger.info('Listing all keys in {0}...'.format(stash))
+    if not jsonify:
+        logger.info('Listing all keys in {0}...'.format(stash))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
     if not keys:
         logger.info('The stash is empty. Go on, put some keys in there...')
         return
-    logger.info(_prettify_list(keys))
+    if jsonify:
+        logger.info(json.dumps(keys, indent=4, sort_keys=False))
+    else:
+        logger.info(_prettify_list(keys))
 
 
 @main.command(name='purge')
