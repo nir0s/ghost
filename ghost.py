@@ -50,7 +50,7 @@ except ImportError:
 
 
 GHOST_HOME = os.path.expanduser(os.path.join('~', '.ghost'))
-DEFAULT_STASH_PATH = '{0}/stash.json'.format(GHOST_HOME)
+DEFAULT_STASH_PATH = os.path.join(GHOST_HOME, 'stash.json')
 DEFAULT_SQLITE_STASH_PATH = 'sqlite:///{0}/stash.sql'.format(GHOST_HOME)
 
 
@@ -111,10 +111,10 @@ class Stash(object):
         value = json.loads(jsonified_value)
         return value
 
-    def _handle_existing_key(self, key, modify):
-        existing_key = self._storage.get(key) or {}
+    def _handle_existing_key(self, key_name, modify):
+        existing_key = self._storage.get(key_name) or {}
         if existing_key and modify:
-            self._storage.delete(key)
+            self._storage.delete(key_name)
         elif existing_key:
             raise GhostError(
                 'The key already exists. Use the modify flag to overwrite')
@@ -129,16 +129,18 @@ class Stash(object):
 
         self._storage.init()
         self.put(
-            key='stored_passphrase',
+            name='stored_passphrase',
             value={'passphrase': self.passphrase})
         return self.passphrase
 
     def put(self,
-            key,
+            name=None,
             value=None,
             modify=False,
             metadata=None,
-            description=''):
+            description='',
+            key=None,
+            encrypt=True):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -162,14 +164,22 @@ class Stash(object):
         same goes for the `uid` which will be generated if it didn't
         previously exist.
 
-        Returns the id of the record in the database
+        `key` is a dictionary representing a key
+
+        Returns the id of the key in the database
         """
+        if key:
+            return self._storage.put(key)
+
+        if not name and not key:
+            raise GhostError('You must provide either a name or a key')
+
         if value and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
         # `existing_key` will be an empty dict if it doesn't exist
-        existing_key = self._handle_existing_key(key, modify)
+        existing_key = self._handle_existing_key(name, modify)
 
-        if not value and not existing_key.get('value'):
+        if (not value and not key) and not existing_key.get('value'):
             raise GhostError('You must provide a value for new keys')
         # TODO: Treat a case in which we try to update an existing key
         # but don't provide a value in which nothing will happen.
@@ -178,54 +188,100 @@ class Stash(object):
 
         modified_at = _get_current_time()
 
-        value = self._encrypt(value) if value else existing_key.get('value')
+        value = self._encrypt(value) if encrypt else value
+        value = value or existing_key.get('value')
         description = description or existing_key.get('description')
         metadata = metadata or existing_key.get('metadata')
 
-        record = dict(
-            name=key,
+        return self._storage.put(dict(
+            name=name,
             value=value,
             description=description,
             created_at=created_at,
             modified_at=modified_at,
             metadata=metadata,
-            uid=uid)
-        return self._storage.put(record)
+            uid=uid))
 
-    def get(self, key, decrypt=True):
+    def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
         """
-        record = self._storage.get(key)
-        if not record.get('value'):
+        key = self._storage.get(key_name)
+        if not key.get('value'):
             return None
         if decrypt:
-            record['value'] = self._decrypt(record['value'])
-        return record
+            key['value'] = self._decrypt(key['value'])
+        return key
 
-    def delete(self, key):
+    def delete(self, key_name):
         """Delete a key if it exists.
         """
-        deleted = self._storage.delete(key)
+        deleted = self._storage.delete(key_name)
         if not deleted:
-            raise GhostError('Key {0} not found'.format(key))
+            raise GhostError('Key {0} not found'.format(key_name))
 
     def list(self):
         """Return a list of all keys.
         """
-        return [result['name'] for result in self._storage.list()
-                if result['name'] != 'stored_passphrase']
+        return [key['name'] for key in self._storage.list()
+                if key['name'] != 'stored_passphrase']
 
-    def get_metadata(self, key):
+    def get_metadata(self, key_name):
         """Returns the metadata for a key.
         """
-        record = self._storage.get(key)
-        return record['metadata'] if record else None
+        key = self._storage.get(key_name)
+        return key['metadata'] if key else None
 
-    def get_value(self, key):
+    def get_value(self, key_name):
         """Returns the value for a key.
         """
-        record = self._storage.get(key)
-        return self._decrypt(record['value']) if record else None
+        key = self._storage.get(key_name)
+        return self._decrypt(key['value']) if key else None
+
+    def load(self, keys=None, key_file=None):
+        """Imports keys to the stash from either a list of keys or a file
+
+        `keys` is a list of dictionaries created by `self.export`
+        `stash_path` is a path to a file created by `self.export`
+        """
+        if not key_file and not stash:
+            raise GhostError(
+                'You must either provide a path to an exported stash file '
+                'or a list of key dicts to import')
+        if key_file:
+            with open(key_file) as stash_file:
+                stash = json.loads(stash_file.read())
+
+        for key in stash:
+            self.put(key=key, encrypt=False)
+
+    def export(self, output_path=None):
+        """Exports all keys in the stash to a list or a file
+        """
+        all_key_names = self.list()
+        all_keys = []
+        for key in all_key_names:
+            # We `dict` this as a precaution as tinydb returns
+            # a tinydb.database.Element instead of a dictionary
+            # and well.. I ain't taking no chances
+            all_keys.append(dict(self.get(key, decrypt=False)))
+        if all_keys:
+            if output_path:
+                with open(output_path, 'w') as output_file:
+                    output_file.write(json.dumps(all_keys, indent=4))
+            return all_keys
+        else:
+            raise GhostError('There are no keys to export')
+
+    def purge(self, force=False):
+        """Purges the stash from all keys
+        """
+        if not force:
+            raise GhostError(
+                "The `force` flag must be provided to perform a stash purge. "
+                "I mean, you don't really want to just delete everything "
+                "without precautionary measures eh?")
+        for key_name in self.list():
+            self.delete(key_name)
 
 
 class TinyDBStorage(object):
@@ -250,27 +306,27 @@ class TinyDBStorage(object):
             raise GhostError('Stash {0} already initialized'.format(
                 self.db_path))
 
-    def put(self, record):
-        return self.db.insert(record)
+    def put(self, key_name):
+        """
+        `key` is the dictionary representing the key
+        """
+        return self.db.insert(key_name)
 
     def list(self):
         return self.db.search(Query().name.matches('.*'))
 
-    def get(self, key):
-        result = self.db.search(Query().name == key)
+    def get(self, key_name):
+        result = self.db.search(Query().name == key_name)
         if not result:
             return {}
         return result[0]
 
-    def delete(self, key):
-        return self.db.remove(Query().name == key)
+    def delete(self, key_name):
+        return self.db.remove(Query().name == key_name)
 
 
 class SQLAlchemyStorage(object):
-    def __init__(self,
-                 db_path=DEFAULT_SQLITE_STASH_PATH,
-                 passphrase=None,
-                 passphrase_size=12):
+    def __init__(self, db_path=DEFAULT_SQLITE_STASH_PATH):
         if not SQLALCHEMY_EXISTS:
             raise ImportError('SQLAlchemy must be installed first')
         self.db_path = db_path
@@ -307,15 +363,18 @@ class SQLAlchemyStorage(object):
         self.metadata.bind = self.db
         self.metadata.create_all()
 
-    def put(self, record):
-        return self.db.execute(self.keys.insert(), **record).lastrowid
+    def put(self, key):
+        """
+        `key` is the dictionary representing the key
+        """
+        return self.db.execute(self.keys.insert(), **key).lastrowid
 
     def list(self):
         return self.db.execute(sql.select([self.keys]))
 
-    def get(self, key):
+    def get(self, key_name):
         results = self.db.execute(sql.select(
-            [self.keys], self.keys.c.name == key))
+            [self.keys], self.keys.c.name == key_name))
 
         # Supposed to be only one record. There's a hidden assumption
         # (is the mother of all fuckups) that you can't insert more
@@ -331,9 +390,9 @@ class SQLAlchemyStorage(object):
             record.update({column.name: value})
         return record
 
-    def delete(self, key):
+    def delete(self, key_name):
         result = self.db.execute(
-            self.keys.delete().where(self.keys.c.name == key))
+            self.keys.delete().where(self.keys.c.name == key_name))
         return result.rowcount > 0
 
 
@@ -464,7 +523,7 @@ def init_stash(stash_path, passphrase, passphrase_size):
 
 
 @main.command(name='put', short_help='Insert a key to the stash')
-@click.argument('key')
+@click.argument('KEY_NAME')
 @click.option('--value',
               multiple=True,
               help='`key=value` pairs to encrypt '
@@ -482,7 +541,7 @@ def init_stash(stash_path, passphrase, passphrase_size):
               help='Whether to modify an existing key if it exists')
 @stash_option
 @passphrase_option
-def put_key(key,
+def put_key(key_name,
             value,
             description,
             meta,
@@ -491,14 +550,14 @@ def put_key(key,
             passphrase):
     """Insert a key to the stash
 
-    `KEY` is the name of the key to insert
+    `KEY_NAME` is the name of the key to insert
     """
     logger.info('Stashing key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
-            key=key,
+            name=key_name,
             value=_build_dict_from_key_value(value),
             modify=modify,
             metadata=_build_dict_from_key_value(meta),
@@ -508,7 +567,7 @@ def put_key(key,
 
 
 @main.command(name='get', short_help='Retrieve a key from the stash')
-@click.argument('key')
+@click.argument('KEY_NAME')
 @click.option('-j',
               '--jsonify',
               is_flag=True,
@@ -516,18 +575,18 @@ def put_key(key,
               help='Output in JSON instead')
 @stash_option
 @passphrase_option
-def get_key(key, jsonify, stash, passphrase):
+def get_key(key_name, jsonify, stash, passphrase):
     """Retrieve a key from the stash
 
-    `KEY` is the name of the key to retrieve
+    `KEY_NAME` is the name of the key to retrieve
     """
     if not jsonify:
         logger.info('Retrieving key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
-    record = stash.get(key=key)
+    record = stash.get(key=key_name)
     if not record:
-        sys.exit('Key {0} not found'.format(key))
+        sys.exit('Key {0} not found'.format(key_name))
     if jsonify:
         logger.info(json.dumps(record, indent=4, sort_keys=False))
     else:
@@ -535,19 +594,19 @@ def get_key(key, jsonify, stash, passphrase):
 
 
 @main.command(name='delete', short_help='Delete a key from the stash')
-@click.argument('key')
+@click.argument('KEY_NAME')
 @stash_option
 @passphrase_option
-def delete_key(key, stash, passphrase):
+def delete_key(key_name, stash, passphrase):
     """Delete a key from the stash
 
-    `KEY` is the name of the key to delete
+    `KEY_NAME` is the name of the key to delete
     """
     logger.info('Deleting key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
-        stash.delete(key=key)
+        stash.delete(key=key_name)
     except GhostError as ex:
         sys.exit(ex)
 
@@ -566,3 +625,60 @@ def list_keys(stash, passphrase):
         logger.info('The stash is empty. Go on, put some keys in there...')
         return
     logger.info(_prettify_list(keys))
+
+
+@main.command(name='purge')
+@click.option('-f',
+              '--force',
+              required=True,
+              is_flag=True,
+              help='This flag is mandatory to perform a purge')
+@stash_option
+@passphrase_option
+def purge_keys(force, stash, passphrase):
+    """Purge the stash from all of its keys
+    """
+    logger.info('Purging stash {0}...'.format(stash))
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
+    try:
+        stash.purge(force)
+    except GhostError as ex:
+        sys.exit(ex)
+
+
+@main.command(name='export')
+@click.option('-o',
+              '--output-path',
+              default='ghost-key-file.json',
+              help='Save exported keys in a file')
+@stash_option
+@passphrase_option
+def export_keys(output_path, stash, passphrase):
+    """Export all keys to a file
+    """
+    logger.info('Exporting stash {0} to {1}...'.format(stash, output_path))
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
+    try:
+        stash.export(output_path=output_path)
+    except GhostError as ex:
+        sys.exit(ex)
+
+
+@main.command(name='load')
+@click.argument('KEY_FILE')
+@stash_option
+@passphrase_option
+def load_keys(key_file, stash, passphrase):
+    """Loads all keys from an exported key file to the stash
+
+    `KEY_FILE` is the exported stash file to load keys from
+    """
+    logger.info('Import all keys from {0} to {1}...'.format(key_file, stash))
+    storage = TinyDBStorage(db_path=stash)
+    stash = Stash(storage, passphrase=passphrase)
+    try:
+        stash.load(key_file=key_file)
+    except GhostError as ex:
+        sys.exit(ex)
