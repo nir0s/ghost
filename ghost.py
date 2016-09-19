@@ -472,6 +472,9 @@ CLICK_CONTEXT_SETTINGS = dict(
 
 @click.group(context_settings=CLICK_CONTEXT_SETTINGS)
 def main():
+    """Ghost generates a secret-store in which you can
+    keep your secrets encrypted. Ghost isn't real. It's just in your head.
+    """
     pass
 
 
@@ -508,6 +511,14 @@ def init_stash(stash_path, passphrase, passphrase_size):
 
     `STASH_PATH` is the path to the stash. If this isn't supplied,
     a default path will be used.
+
+    After initializing a stash, don't forget you can set environment
+    variables for both your stash's path and its passphrase.
+    On Linux/OSx you can run:
+
+    export GHOST_STASH_PATH='MY_PATH'
+
+    export GHOST_PASSPHRASE='MY_PASSPHRASE'
     """
     logger.info('Initializing stash...')
     storage = TinyDBStorage(db_path=stash_path)
