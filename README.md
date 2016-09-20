@@ -155,6 +155,7 @@ import ghost
 
 # Initialize a new stash
 storage = TinyDBStorage(db_path='~/.ghost/stash.json')
+# Can also generate a passphrase via `ghost.generate_passphrase(passphrase_size=20)`
 stash = Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
 

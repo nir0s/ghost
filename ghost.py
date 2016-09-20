@@ -199,7 +199,7 @@ class Stash(object):
             return None
         if decrypt:
             key['value'] = self._decrypt(key['value'])
-        return key if not field else key.get()
+        return key
 
     def delete(self, key_name):
         """Delete a key if it exists.
@@ -234,9 +234,8 @@ class Stash(object):
     def export(self, output_path=None):
         """Exports all keys in the stash to a list or a file
         """
-        all_key_names = self.list()
         all_keys = []
-        for key in all_key_names:
+        for key in self.list():
             # We `dict` this as a precaution as tinydb returns
             # a tinydb.database.Element instead of a dictionary
             # and well.. I ain't taking no chances
