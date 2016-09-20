@@ -3,6 +3,8 @@ ghost - shhhhhh
 
 WIP! No tests yet! Not for use in production! (Well, it depends on what you call production really.)
 
+Will support Python 3 very soon. Currently only supports Python 2.7
+
 [![Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
 [![Build status](https://ci.appveyor.com/api/projects/status/kn6yqwqhsdn54ich/branch/master?svg=true)](https://ci.appveyor.com/project/Cloudify/ghost/branch/master)
 [![PyPI](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
@@ -175,7 +177,7 @@ stash.delete('aws')
 Currently, only two backends are provided.
 
 * [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
-* [SQLAlchemy](http://www.sqlalchemy.org) (Tested on v1.0.15)
+* [SQLAlchemy](http://www.sqlalchemy.org) (Tested on v1.0.15) (Note that the SQLAlchemyStorage supports any SQLAlchemy connection string. The default one is sqlite)
 
 NOTE: ghost doesn't install SQLAlchemy by default or any other backend other than TinyDB for that matter. Please Install SQLAlchemy separately if you need to use its backend.
 
@@ -185,7 +187,7 @@ I'd like to also support Vault in addition to KMS and any other cloud provider b
 
 Encryption is done using [cryptography](https://cryptography.io/en/latest/). It is done only on values and these are saved in hexa. Keys are left in plain text.
 
-Values are encrypted once provided and are decrypted only upon request, meaning that they're only available in memory for a very short period of time.
+Values are encrypted once provided and decrypted only upon request, meaning that they're only available in memory for a very short period of time.
 
 See [cryptography](https://cryptography.io/en/latest/) documentation for additional information.
 

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # TODO: Add categories
-# TODO: export and import from one storage to another
-# TODO: Add filters to allow listing according to any field using regex
+# TODO: Output phrase to file during `init`
+# TODO: Output key to file during `get`
 
 
 import os
@@ -134,13 +134,11 @@ class Stash(object):
         return self.passphrase
 
     def put(self,
-            name=None,
+            name,
             value=None,
             modify=False,
             metadata=None,
-            description='',
-            key=None,
-            encrypt=True):
+            description=''):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -164,22 +162,14 @@ class Stash(object):
         same goes for the `uid` which will be generated if it didn't
         previously exist.
 
-        `key` is a dictionary representing a key
-
         Returns the id of the key in the database
         """
-        if key:
-            return self._storage.put(key)
-
-        if not name and not key:
-            raise GhostError('You must provide either a name or a key')
-
         if value and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
         # `existing_key` will be an empty dict if it doesn't exist
         existing_key = self._handle_existing_key(name, modify)
 
-        if (not value and not key) and not existing_key.get('value'):
+        if not value and not existing_key.get('value'):
             raise GhostError('You must provide a value for new keys')
         # TODO: Treat a case in which we try to update an existing key
         # but don't provide a value in which nothing will happen.
@@ -188,8 +178,7 @@ class Stash(object):
 
         modified_at = _get_current_time()
 
-        value = self._encrypt(value) if encrypt else value
-        value = value or existing_key.get('value')
+        value = self._encrypt(value) or existing_key.get('value')
         description = description or existing_key.get('description')
         metadata = metadata or existing_key.get('metadata')
 
@@ -202,7 +191,7 @@ class Stash(object):
             metadata=metadata,
             uid=uid))
 
-    def get(self, key_name, decrypt=True):
+    def get(self, key_name, decrypt=True, field=None):
         """Return a key with its parameters if it was found.
         """
         key = self._storage.get(key_name)
@@ -210,7 +199,7 @@ class Stash(object):
             return None
         if decrypt:
             key['value'] = self._decrypt(key['value'])
-        return key
+        return key if not field else key.get()
 
     def delete(self, key_name):
         """Delete a key if it exists.
@@ -225,34 +214,22 @@ class Stash(object):
         return [key['name'] for key in self._storage.list()
                 if key['name'] != 'stored_passphrase']
 
-    def get_metadata(self, key_name):
-        """Returns the metadata for a key.
-        """
-        key = self._storage.get(key_name)
-        return key['metadata'] if key else None
-
-    def get_value(self, key_name):
-        """Returns the value for a key.
-        """
-        key = self._storage.get(key_name)
-        return self._decrypt(key['value']) if key else None
-
     def load(self, keys=None, key_file=None):
         """Imports keys to the stash from either a list of keys or a file
 
         `keys` is a list of dictionaries created by `self.export`
         `stash_path` is a path to a file created by `self.export`
         """
-        if not key_file and not stash:
+        if not keys and not key_file or (keys and key_file):
             raise GhostError(
                 'You must either provide a path to an exported stash file '
                 'or a list of key dicts to import')
         if key_file:
             with open(key_file) as stash_file:
-                stash = json.loads(stash_file.read())
+                keys = json.loads(stash_file.read())
 
-        for key in stash:
-            self.put(key=key, encrypt=False)
+        for key in keys:
+            return self._storage.put(key)
 
     def export(self, output_path=None):
         """Exports all keys in the stash to a list or a file
@@ -376,19 +353,19 @@ class SQLAlchemyStorage(object):
         results = self.db.execute(sql.select(
             [self.keys], self.keys.c.name == key_name))
 
-        # Supposed to be only one record. There's a hidden assumption
+        # Supposed to be only one key_values. There's a hidden assumption
         # (is the mother of all fuckups) that you can't insert more
         # than one record with the same `name` since it is verified
         # in `put`.
-        record_values = None
+        key_values = None
         for result in results:
-            record_values = result
-        if not record_values:
+            key_values = result
+        if not key_values:
             return {}
-        record = {}
-        for column, value in zip(self.keys.columns, record_values):
-            record.update({column.name: value})
-        return record
+        key = {}
+        for column, value in zip(self.keys.columns, key_values):
+            key.update({column.name: value})
+        return key
 
     def delete(self, key_name):
         result = self.db.execute(
@@ -416,14 +393,14 @@ class GhostError(Exception):
 def _build_dict_from_key_value(keys_and_values):
     """Return a dict from a list of key=value pairs
     """
-    record = {}
+    key_dict = {}
     for key_value in keys_and_values:
         if '=' not in key_value:
             raise GhostError('Pair {0} is not of `key=value` format'.format(
                 key_value))
         key, value = key_value.split('=', 1)
-        record.update({str(key): str(value)})
-    return record
+        key_dict.update({str(key): str(value)})
+    return key_dict
 
 
 def _prettify_dict(record):
