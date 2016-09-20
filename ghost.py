@@ -402,8 +402,8 @@ def _build_dict_from_key_value(keys_and_values):
     return key_dict
 
 
-def _prettify_dict(record):
-    """Return a human readable format of a record (dict).
+def _prettify_dict(key):
+    """Return a human readable format of a key (dict).
 
     Example:
 
@@ -415,15 +415,17 @@ def _prettify_dict(record):
     Value:         secret_key=my_secret_key;access_key=my_access_key
     Name:          aws
     """
-    pretty_record = ''
-    for key, value in record.items():
+    assert isinstance(key, dict)
+
+    pretty_key = ''
+    for key, value in key.items():
         if isinstance(value, dict):
             pretty_value = ''
             for k, v in value.items():
                 pretty_value += '{0}={1};'.format(k, v)
             value = pretty_value
-        pretty_record += '{0:15}{1}\n'.format(key.title() + ':', value)
-    return pretty_record
+        pretty_key += '{0:15}{1}\n'.format(key.title() + ':', value)
+    return pretty_key
 
 
 def _prettify_list(items):
@@ -435,6 +437,8 @@ def _prettify_list(items):
       - my_first_key
       - my_second_key
     """
+    assert isinstance(items, list)
+
     keys_list = 'Available Keys:'
     for item in items:
         keys_list += '\n  - {0}'.format(item)
