@@ -177,6 +177,10 @@ class TestTinyDBStorage:
         assert retrieved_key == {}
 
 
+class TestSQLAlchemyStorage:
+    pass
+
+
 TEST_PASSPHRASE = 'abcdefg'
 
 
@@ -488,3 +492,31 @@ class TestCLI:
         assert result.exit_code == 1
         assert 'The `force` flag must be provided to perform a stash purge' \
             in result.output
+
+    def test_export(self, test_cli_stash, temp_file_path):
+        _invoke('put_key aws key=value')
+        _invoke('put_key gcp key=value')
+        _invoke('export_keys -o {0}'.format(temp_file_path))
+        with open(temp_file_path) as exported_stash:
+            data = json.loads(exported_stash.read())
+        assert data[0]['name'] == 'aws'
+        assert data[0]['value'] != {'key': 'value'}
+        assert data[1]['name'] == 'gcp'
+
+    def test_export_no_keys(self, test_cli_stash, temp_file_path):
+        result = _invoke('export_keys -o {0}'.format(temp_file_path))
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'There are no keys to export' in result.output
+
+    def test_load(self, test_cli_stash, temp_file_path):
+        _invoke('put_key aws key=value')
+        _invoke('put_key gcp key=value')
+        key_list = test_cli_stash.list()
+        _invoke('export_keys -o {0}'.format(temp_file_path))
+        _invoke('purge_stash -f')
+        result = _invoke('list_keys -j')
+        assert 'The stash is empty' in result.output
+        _invoke('load_keys {0}'.format(temp_file_path))
+        result = _invoke('list_keys -j')
+        assert json.loads(result.output) == key_list

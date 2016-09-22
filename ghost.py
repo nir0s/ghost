@@ -67,7 +67,7 @@ class Stash(object):
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
-                salt='ghost',
+                salt=b'ghost',
                 iterations=1000000,
                 backend=default_backend())
             self._key = base64.urlsafe_b64encode(kdf.derive(self.passphrase))
@@ -111,7 +111,8 @@ class Stash(object):
         return existing_key
 
     def init(self):
-        if not isinstance(self.passphrase, basestring) or not self.passphrase:
+        if not isinstance(self.passphrase, (str, bytes)) \
+                or not self.passphrase:
             raise GhostError('passphrase must be a non-empty string')
 
         self._storage.init()
@@ -235,6 +236,7 @@ class Stash(object):
         `keys` is a list of dictionaries created by `self.export`
         `stash_path` is a path to a file created by `self.export`
         """
+        # TODO: Handle keys not dict or key_file not json
         if not keys and not key_file or (keys and key_file):
             raise GhostError(
                 'You must either provide a path to an exported stash file '
@@ -368,7 +370,7 @@ def _get_current_time():
 
 
 def generate_passphrase(size=12):
-    chars = string.lowercase + string.ascii_uppercase + string.digits
+    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(size))
 
 
@@ -670,7 +672,4 @@ def load_keys(key_file, stash, passphrase):
     click.echo('Import all keys from {0} to {1}...'.format(key_file, stash))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
-    try:
-        stash.load(key_file=key_file)
-    except GhostError as ex:
-        sys.exit(ex)
+    stash.load(key_file=key_file)

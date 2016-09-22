@@ -1,7 +1,2 @@
-mock
-nose
 pytest
-nose-cov
-testtools
-testfixtures
-coverage==3.7.1
+pytest-cov
