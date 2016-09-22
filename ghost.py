@@ -25,7 +25,6 @@ import uuid
 import base64
 import random
 import string
-import logging
 import binascii
 import warnings
 from datetime import datetime
@@ -52,18 +51,6 @@ except ImportError:
 GHOST_HOME = os.path.expanduser(os.path.join('~', '.ghost'))
 DEFAULT_STASH_PATH = os.path.join(GHOST_HOME, 'stash.json')
 DEFAULT_SQLITE_STASH_PATH = 'sqlite:///{0}/stash.sql'.format(GHOST_HOME)
-
-
-def setup_logger():
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(message)s'))
-    logger = logging.getLogger('ghost')
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    return logger
-
-
-logger = setup_logger()
 
 
 class Stash(object):
@@ -191,7 +178,7 @@ class Stash(object):
             metadata=metadata,
             uid=uid))
 
-    def get(self, key_name, decrypt=True, field=None):
+    def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
         """
         key = self._storage.get(key_name)
@@ -214,22 +201,16 @@ class Stash(object):
         return [key['name'] for key in self._storage.list()
                 if key['name'] != 'stored_passphrase']
 
-    def load(self, keys=None, key_file=None):
-        """Imports keys to the stash from either a list of keys or a file
-
-        `keys` is a list of dictionaries created by `self.export`
-        `stash_path` is a path to a file created by `self.export`
+    def purge(self, force=False):
+        """Purges the stash from all keys
         """
-        if not keys and not key_file or (keys and key_file):
+        if not force:
             raise GhostError(
-                'You must either provide a path to an exported stash file '
-                'or a list of key dicts to import')
-        if key_file:
-            with open(key_file) as stash_file:
-                keys = json.loads(stash_file.read())
-
-        for key in keys:
-            return self._storage.put(key)
+                "The `force` flag must be provided to perform a stash purge. "
+                "I mean, you don't really want to just delete everything "
+                "without precautionary measures eh?")
+        for key_name in self.list():
+            self.delete(key_name)
 
     def export(self, output_path=None):
         """Exports all keys in the stash to a list or a file
@@ -248,16 +229,22 @@ class Stash(object):
         else:
             raise GhostError('There are no keys to export')
 
-    def purge(self, force=False):
-        """Purges the stash from all keys
+    def load(self, keys=None, key_file=None):
+        """Imports keys to the stash from either a list of keys or a file
+
+        `keys` is a list of dictionaries created by `self.export`
+        `stash_path` is a path to a file created by `self.export`
         """
-        if not force:
+        if not keys and not key_file or (keys and key_file):
             raise GhostError(
-                "The `force` flag must be provided to perform a stash purge. "
-                "I mean, you don't really want to just delete everything "
-                "without precautionary measures eh?")
-        for key_name in self.list():
-            self.delete(key_name)
+                'You must either provide a path to an exported stash file '
+                'or a list of key dicts to import')
+        if key_file:
+            with open(key_file) as stash_file:
+                keys = json.loads(stash_file.read())
+
+        for key in keys:
+            self._storage.put(key)
 
 
 class TinyDBStorage(object):
@@ -282,11 +269,11 @@ class TinyDBStorage(object):
             raise GhostError('Stash {0} already initialized'.format(
                 self.db_path))
 
-    def put(self, key_name):
+    def put(self, key):
         """
         `key` is the dictionary representing the key
         """
-        return self.db.insert(key_name)
+        return self.db.insert(key)
 
     def list(self):
         return self.db.search(Query().name.matches('.*'))
@@ -455,7 +442,6 @@ def main():
     """Ghost generates a secret-store in which you can
     keep your secrets encrypted. Ghost isn't real. It's just in your head.
     """
-    pass
 
 
 stash_option = click.option(
@@ -496,21 +482,26 @@ def init_stash(stash_path, passphrase, passphrase_size):
     variables for both your stash's path and its passphrase.
     On Linux/OSx you can run:
 
-    export GHOST_STASH_PATH='MY_PATH'
-
-    export GHOST_PASSPHRASE='MY_PASSPHRASE'
+    export GHOST_STASH_PATH='MY_PATH' \n
+    export GHOST_PASSPHRASE=$(cat passphrase.ghost)
     """
-    logger.info('Initializing stash...')
+    click.echo('Initializing stash...')
     storage = TinyDBStorage(db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
+    passphrase_file_name = 'passphrase.ghost'
     try:
         passphrase = stash.init()
+        with open(passphrase_file_name, 'w') as passphrase_file:
+            passphrase_file.write(passphrase)
     except GhostError as ex:
         sys.exit(ex)
-    logger.info('Initalized stash at: {0}'.format(stash_path))
-    logger.info('Your passphrase is: {0}'.format(passphrase))
-    logger.info('Make sure you save your passphrase somewhere safe. '
-                'If lost, you will lose access to your stash.')
+    click.echo('Initalized stash at: {0}'.format(stash_path))
+    click.echo(
+        'Your passphrase can be found under the `{0}` file in the '
+        'current directory'.format(passphrase_file_name))
+    click.echo(
+        'Make sure you save your passphrase somewhere safe. '
+        'If lost, you will lose access to your stash.')
 
 
 @main.command(name='put', short_help='Insert a key to the stash')
@@ -543,7 +534,7 @@ def put_key(key_name,
     `VALUE` is a key=value argument which can be provided multiple times.
     it is the encrypted value of your key
     """
-    logger.info('Stashing key...')
+    click.echo('Stashing key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -572,16 +563,16 @@ def get_key(key_name, jsonify, stash, passphrase):
     `KEY_NAME` is the name of the key to retrieve
     """
     if not jsonify:
-        logger.info('Retrieving key...')
+        click.echo('Retrieving key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key_name=key_name)
     if not record:
         sys.exit('Key {0} not found'.format(key_name))
     if jsonify:
-        logger.info(json.dumps(record, indent=4, sort_keys=False))
+        click.echo(json.dumps(record, indent=4, sort_keys=False))
     else:
-        logger.info('\n' + _prettify_dict(record))
+        click.echo('\n' + _prettify_dict(record))
 
 
 @main.command(name='delete', short_help='Delete a key from the stash')
@@ -593,7 +584,7 @@ def delete_key(key_name, stash, passphrase):
 
     `KEY_NAME` is the name of the key to delete
     """
-    logger.info('Deleting key...')
+    click.echo('Deleting key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -614,17 +605,16 @@ def list_keys(jsonify, stash, passphrase):
     """List all keys in the stash
     """
     if not jsonify:
-        logger.info('Listing all keys in {0}...'.format(stash))
+        click.echo('Listing all keys in {0}...'.format(stash))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
     if not keys:
-        logger.info('The stash is empty. Go on, put some keys in there...')
-        return
-    if jsonify:
-        logger.info(json.dumps(keys, indent=4, sort_keys=False))
+        click.echo('The stash is empty. Go on, put some keys in there...')
+    elif jsonify:
+        click.echo(json.dumps(keys, indent=4, sort_keys=False))
     else:
-        logger.info(_prettify_list(keys))
+        click.echo(_prettify_list(keys))
 
 
 @main.command(name='purge')
@@ -635,14 +625,16 @@ def list_keys(jsonify, stash, passphrase):
               help='This flag is mandatory to perform a purge')
 @stash_option
 @passphrase_option
-def purge_keys(force, stash, passphrase):
+def purge_stash(force, stash, passphrase):
     """Purge the stash from all of its keys
     """
-    logger.info('Purging stash {0}...'.format(stash))
+    click.echo('Purging stash {0}...'.format(stash))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.purge(force)
+        # Maybe we should verify that the list is empty
+        # afterwards?
     except GhostError as ex:
         sys.exit(ex)
 
@@ -657,7 +649,7 @@ def purge_keys(force, stash, passphrase):
 def export_keys(output_path, stash, passphrase):
     """Export all keys to a file
     """
-    logger.info('Exporting stash {0} to {1}...'.format(stash, output_path))
+    click.echo('Exporting stash {0} to {1}...'.format(stash, output_path))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -675,7 +667,7 @@ def load_keys(key_file, stash, passphrase):
 
     `KEY_FILE` is the exported stash file to load keys from
     """
-    logger.info('Import all keys from {0} to {1}...'.format(key_file, stash))
+    click.echo('Import all keys from {0} to {1}...'.format(key_file, stash))
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
