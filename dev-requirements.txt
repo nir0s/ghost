@@ -1,6 +1,3 @@
-mock
-nose
-nose-cov
-testtools
-testfixtures
-coverage==3.7.1
+pytest
+pytest-cov
+sqlalchemy>=1.0.15
