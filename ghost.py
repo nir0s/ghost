@@ -305,7 +305,8 @@ class SQLAlchemyStorage(object):
             Column('description', String),
             Column('metadata', PickleType),
             Column('modified_at', String),
-            Column('created_at', String))
+            Column('created_at', String),
+            Column('uid', String))
 
         self._db = None
 
@@ -335,7 +336,11 @@ class SQLAlchemyStorage(object):
         return self.db.execute(self.keys.insert(), **key).lastrowid
 
     def list(self):
-        return self.db.execute(sql.select([self.keys]))
+        keys = self.db.execute(sql.select([self.keys]))
+        all_keys = []
+        for key in keys:
+            all_keys.append(key[0])
+        return all_keys
 
     def get(self, key_name):
         results = self.db.execute(sql.select(

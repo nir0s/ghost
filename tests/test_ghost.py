@@ -22,6 +22,10 @@ import tempfile
 import pytest
 import click.testing as clicktest
 
+from sqlalchemy import sql
+from sqlalchemy import inspect
+from sqlalchemy import create_engine
+
 import ghost
 
 
@@ -178,10 +182,82 @@ class TestTinyDBStorage:
 
 
 class TestSQLAlchemyStorage:
-    pass
+    def test_init(self):
+        tmpdir = os.path.join(tempfile.mkdtemp())
+        shutil.rmtree(tmpdir)
+        assert not os.path.isdir(tmpdir)
+        stash_path = 'sqlite:///' + os.path.join(tmpdir, 'stash.json')
+        storage = ghost.SQLAlchemyStorage(stash_path)
+        try:
+            storage.init()
+            assert os.path.isdir(tmpdir)
+            engine = create_engine(stash_path)
+            inspector = inspect(engine)
+            tables = inspector.get_table_names()
+            assert 'keys' in tables
+            columns = [c['name'] for c in inspector.get_columns(tables[0])]
+            assert 'description' in columns
+            assert 'uid' in columns
+            assert 'name' in columns
+            assert 'value' in columns
+            assert 'metadata' in columns
+            assert 'modified_at' in columns
+            assert 'created_at' in columns
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_init_stash_already_exists(self):
+        fd, stash_path = tempfile.mkstemp()
+        os.close(fd)
+        storage = ghost.SQLAlchemyStorage('sqlite://' + stash_path)
+        with pytest.raises(ghost.GhostError) as ex:
+            storage.init()
+        assert 'Stash {0} already initialized'.format(stash_path) in ex.value
+        os.remove(stash_path)
+
+    def test_put(self, stash_path):
+        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage.init()
+        storage.put(dict(
+            name='my_key',
+            value={'key': 'value'},
+            description='desc'))
+        engine = create_engine('sqlite:///' + stash_path)
+        results = engine.execute(sql.select(
+            [storage.keys], storage.keys.c.name == 'my_key'))
+        for result in results:
+            assert result[0] == 'my_key'
+            assert result[1] == {'key': 'value'}
+            assert result[2] == 'desc'
+
+    def test_list(self, stash_path):
+        key = {'name': 'my_key'}
+        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage.init()
+        storage.put(key)
+        key_list = storage.list()
+        assert len(key_list) == 1
+        assert key['name'] in key_list
+
+    def test_empty_list(self, stash_path):
+        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage.init()
+        key_list = storage.list()
+        assert len(key_list) == 0
+
+    def test_get_delete(self, stash_path):
+        inserted_key = {'name': 'my_key'}
+        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage.init()
+        storage.put(inserted_key)
+        retrieved_key = storage.get('my_key')
+        assert inserted_key['name'] == retrieved_key['name']
+        storage.delete('my_key')
+        retrieved_key = storage.get('my_key')
+        assert retrieved_key == {}
 
 
-TEST_PASSPHRASE = 'abcdefg'
+TEST_PASSPHRASE = 'a'
 
 
 @pytest.fixture
@@ -198,6 +274,21 @@ def assert_stash_initialized(stash_path):
     assert len(db) == 1
 
 
+# def assert_sql_stash_initialized(stash_path):
+#     engine = create_engine('sqlite:///' + stash_path)
+#     inspector = inspect(engine)
+#     tables = inspector.get_table_names()
+#     assert 'keys' in tables
+#     columns = [c['name'] for c in inspector.get_columns(tables[0])]
+#     assert 'description' in columns
+#     assert 'uid' in columns
+#     assert 'name' in columns
+#     assert 'value' in columns
+#     assert 'metadata' in columns
+#     assert 'modified_at' in columns
+#     assert 'created_at' in columns
+
+
 def assert_key_put(db, dont_verify_value=False):
     key = db['2']
     assert key['name'] == 'aws'
@@ -205,6 +296,17 @@ def assert_key_put(db, dont_verify_value=False):
         assert key['value'] == {'key': 'value'}
     assert key['description'] is None
     assert key['metadata'] is None
+
+
+# class TestSQLAlchemyStash:
+#     def test_init(self, stash_path):
+#         storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+#         stash = ghost.Stash(storage, TEST_PASSPHRASE)
+#         passphrase = stash.init()
+#         assert stash._storage == storage
+#         assert stash.passphrase == TEST_PASSPHRASE
+#         assert passphrase == TEST_PASSPHRASE
+#         assert_sql_stash_initialized(stash_path)
 
 
 class TestStash:
