@@ -274,21 +274,6 @@ def assert_stash_initialized(stash_path):
     assert len(db) == 1
 
 
-# def assert_sql_stash_initialized(stash_path):
-#     engine = create_engine('sqlite:///' + stash_path)
-#     inspector = inspect(engine)
-#     tables = inspector.get_table_names()
-#     assert 'keys' in tables
-#     columns = [c['name'] for c in inspector.get_columns(tables[0])]
-#     assert 'description' in columns
-#     assert 'uid' in columns
-#     assert 'name' in columns
-#     assert 'value' in columns
-#     assert 'metadata' in columns
-#     assert 'modified_at' in columns
-#     assert 'created_at' in columns
-
-
 def assert_key_put(db, dont_verify_value=False):
     key = db['2']
     assert key['name'] == 'aws'
@@ -296,17 +281,6 @@ def assert_key_put(db, dont_verify_value=False):
         assert key['value'] == {'key': 'value'}
     assert key['description'] is None
     assert key['metadata'] is None
-
-
-# class TestSQLAlchemyStash:
-#     def test_init(self, stash_path):
-#         storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
-#         stash = ghost.Stash(storage, TEST_PASSPHRASE)
-#         passphrase = stash.init()
-#         assert stash._storage == storage
-#         assert stash.passphrase == TEST_PASSPHRASE
-#         assert passphrase == TEST_PASSPHRASE
-#         assert_sql_stash_initialized(stash_path)
 
 
 class TestStash:

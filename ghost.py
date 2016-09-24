@@ -562,9 +562,13 @@ def put_key(key_name,
               is_flag=True,
               default=False,
               help='Output in JSON instead')
+@click.option('--no-decrypt',
+              is_flag=True,
+              default=False,
+              help='Retrieve the key without decrypting its value')
 @stash_option
 @passphrase_option
-def get_key(key_name, jsonify, stash, passphrase):
+def get_key(key_name, jsonify, no_decrypt, stash, passphrase):
     """Retrieve a key from the stash
 
     `KEY_NAME` is the name of the key to retrieve
@@ -573,7 +577,7 @@ def get_key(key_name, jsonify, stash, passphrase):
         click.echo('Retrieving key...')
     storage = TinyDBStorage(db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
-    record = stash.get(key_name=key_name)
+    record = stash.get(key_name=key_name, decrypt=not no_decrypt)
     if not record:
         sys.exit('Key {0} not found'.format(key_name))
     if jsonify:

@@ -1,22 +1,21 @@
 ghost - shhhhhh
 ===============
 
-WIP! No tests yet! Not for use in production! (Well, it depends on what you call production really.)
-
 Will support Python 3 very soon. Currently only supports Python 2.7
 
 [![Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
 [![Build status](https://ci.appveyor.com/api/projects/status/kn6yqwqhsdn54ich/branch/master?svg=true)](https://ci.appveyor.com/project/Cloudify/ghost/branch/master)
 [![PyPI](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
 [![PypI](http://img.shields.io/pypi/v/ghost.svg)](http://img.shields.io/pypi/v/ghost.svg)
+[![PypI](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
+[![PypI](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
+[![Requirements Status](https://requires.io/github/nir0s/ghost/requirements.svg?branch=master)](https://requires.io/github/nir0s/ghost/requirements/?branch=master)
+[![Code Coverage](https://codecov.io/github/nir0s/ghost/coverage.svg?branch=master)](https://codecov.io/github/nir0s/ghost?branch=master)
+[![Wheel](https://img.shields.io/pypi/wheel/ghost.svg?style=flat)](https://pypi.python.org/pypi/ghost)
 
-ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends.
-
-ghost leans on the premise that you might want a single API for both clients and servers to use so the cross-backend nature should provide just that without forcing the user to run a server.
+ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends without requiring a server to run.
 
 ## Alternatives
-
-The reason for ghost to exist is that I found no alternatives which are an easy enough abstraction for multiple backends, with, also, a file-based backend which also doesn't require a server (Also needed a Pythonic API for work related issues but that's a different issue)
 
 * While [Vault](http://vaultproject.io) is truly spectacular and I've been using it for quite a while now, it requires a server running.
 * [Credstash](https://github.com/fugue/credstash) is only AWS KMS based. 
@@ -66,28 +65,30 @@ Commands:
   put     Insert a key to the stash
 
 
-
+# Initializing a stash
 $ ghost init
 Initializing stash...
 Initialized stash at: /home/nir0s/.ghost/stash.json
-Your passphrase is: qVqkxQ1UfP9s
+Your passphrase can be found under the `passphrase.ghost` file in the current directory
 Make sure you save your passphrase somewhere safe. If lost, any access to your stash will be impossible.
 ...
 
-$ export GHOST_STASH_PATH='~/my_stash.json'
-$ export GHOST_PASSPHRASE='qVqkxQ1UfP9s'
+$ export GHOST_STASH_PATH='~/.ghost/my_stash.json'
+$ export GHOST_PASSPHRASE=$(cat passphrase.ghost)
 
 $ ghost list
-Listing all keys in ~/my_stash.json...
+Listing all keys in ~/.ghost/my_stash.json...
 The stash is empty. Go on, put some keys in there...
 
+# Putting keys in the stash
 $ ghost put aws secret=my_secret access=my_access
-Stashing key in ~/my_stash.json...
+Stashing key...
 $ ghost put gcp token=my_token --description "GCP Token" --meta Owner=Me --meta Exp=15.06.17
 ...
 
+# Retrieving a key
 $ ghost get aws
-Retrieving key from ~/my_stash.json...
+Retrieving key...
 
 Description:   None
 Uid:           08ee6102-5668-440f-b583-97a1c7a17e5a
@@ -97,6 +98,7 @@ Modified_At:   2016-09-15T15:10:01
 Value:         access=my_access;secret=my_secret;
 Name:          aws
 
+# Retrieving a key in machine readable json
 $ ghost get gcp -j
 {
     "description": "My GCP Token", 
@@ -113,11 +115,12 @@ $ ghost get gcp -j
     "name": "gcp"
 }
 
+# Modifying an existing key
 $ ghost put gcp token=my_modified_token --modify
-Stashing key in ~/my_stash.json...
+Stashing key...
 
 $ ghost get gcp
-Retrieving key from ~/my_stash.json...
+Retrieving key...
 
 Description:   My GCP Token
 Uid:           789a3705-044c-4e34-b720-4bc43bfbae90
@@ -127,16 +130,19 @@ Modified_At:   2016-09-15T15:57:05
 Value:         token=my_modified_token;
 Name:          gcp
 
+# Listing the existing keys
 $ ghost list
-Listing all keys in ~/my_stash.json...
+Listing all keys in ~/.ghost/my_stash.json...
 Available Keys:
   - aws
   - gcp
 
+# Deleting a key
 $ ghost delete aws
-Deleting key from stash ~/my_stash.json...
+Deleting key...
 ...
 
+# Deleting all keys
 $ ghost purge -f
 Purging stash /home/nir0s/.ghost/stash.json...
 
@@ -184,13 +190,15 @@ NOTE: ghost doesn't install SQLAlchemy by default or any other backend other tha
 
 I'd like to also support Vault in addition to KMS and any other cloud provider based key stores.
 
+
 ## Encryption & Decryption
 
 Encryption is done using [cryptography](https://cryptography.io/en/latest/). It is done only on values and these are saved in hexa. Keys are left in plain text.
 
 Values are encrypted once provided and decrypted only upon request, meaning that they're only available in memory for a very short period of time.
 
-See [cryptography](https://cryptography.io/en/latest/) documentation for additional information.
+See [cryptography](https://cryptography.io/en/latest/)'s documentation for additional information.
+
 
 ## Exporting and Importing
 
@@ -201,6 +209,24 @@ The `export` command allows you to generate a json file containing all keys (enc
 So, for instance, if you have a local implementation using sqlite, you could export all keys; create a new stash using the SQLAlchemy storage for postgre and load all keys into that storage for your server's implementation.
 
 This also enables you to create a backup flow for your keys.
+
+
+## Secret key delegation
+
+Since ghost doesn't run as a server, it doesn't provide a formal method for delegating keys to a server without explicitly passing them over in plain text post-decryption. You can work around that by retrieving a key without decrypting it (via the `--no-decrypt` flag in the CLI or the `decrypt` argument in the Python API) and sending it to the other server where the same passphrase is held and decrypting  it there.
+
+This can be done somewhat like this:
+
+```python
+...
+encrypted_value = stash.get('my_key', decrypt=False)['value']
+save_to_file(encrypted_value)
+
+# and on the server
+...
+stash = Stash(storage, passphrase='SAME_PASSPHRASE')
+decrypted_value = stash._decrypt(encrypted_value_from_file)
+```
 
 ## Testing
 
