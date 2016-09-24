@@ -478,7 +478,8 @@ class TestCLI:
         assert_stash_initialized(test_cli_stash._storage.db_path)
 
     def test_init_already_initialized(self, test_cli_stash):
-        result = _invoke('init_stash')
+        result = _invoke('init_stash {0}'.format(
+            os.environ['GHOST_STASH_PATH']))
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'already initialized' in result.output
