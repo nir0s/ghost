@@ -5,7 +5,6 @@ Will support Python 3 very soon. Currently only supports Python 2.7
 
 [![Travis Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
 [![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/kn6yqwqhsdn54ich/branch/master?svg=true)](https://ci.appveyor.com/project/Cloudify/ghost/branch/master)
-[![PyPI Monthly Downloads](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
 [![PyPI Version](http://img.shields.io/pypi/v/ghost.svg)](http://img.shields.io/pypi/v/ghost.svg)
 [![Supported Python Versions](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
 [![Requirements Status](https://requires.io/github/nir0s/ghost/requirements.svg?branch=master)](https://requires.io/github/nir0s/ghost/requirements/?branch=master)
