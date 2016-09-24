@@ -3,14 +3,15 @@ ghost - shhhhhh
 
 Will support Python 3 very soon. Currently only supports Python 2.7
 
-[![Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
-[![Build status](https://ci.appveyor.com/api/projects/status/kn6yqwqhsdn54ich/branch/master?svg=true)](https://ci.appveyor.com/project/Cloudify/ghost/branch/master)
-[![PyPI](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
-[![PypI](http://img.shields.io/pypi/v/ghost.svg)](http://img.shields.io/pypi/v/ghost.svg)
-[![PypI](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
+[![Travis Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
+[![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/kn6yqwqhsdn54ich/branch/master?svg=true)](https://ci.appveyor.com/project/Cloudify/ghost/branch/master)
+[![PyPI Monthly Downloads](http://img.shields.io/pypi/dm/ghost.svg)](http://img.shields.io/pypi/dm/ghost.svg)
+[![PyPI Version](http://img.shields.io/pypi/v/ghost.svg)](http://img.shields.io/pypi/v/ghost.svg)
+[![Supported Python Versions](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
 [![Requirements Status](https://requires.io/github/nir0s/ghost/requirements.svg?branch=master)](https://requires.io/github/nir0s/ghost/requirements/?branch=master)
 [![Code Coverage](https://codecov.io/github/nir0s/ghost/coverage.svg?branch=master)](https://codecov.io/github/nir0s/ghost?branch=master)
-[![Wheel](https://img.shields.io/pypi/wheel/ghost.svg?style=flat)](https://pypi.python.org/pypi/ghost)
+[![Is Wheel](https://img.shields.io/pypi/wheel/ghost.svg?style=flat)](https://pypi.python.org/pypi/ghost)
+[![Latest Github Release](https://img.shields.io/github/release/nir0s/ghost.svg)](https://img.shields.io/github/release/nir0s/ghost.svg)
 
 ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends without requiring a server to run.
 
