@@ -16,8 +16,9 @@ env:
     - TOX_ENV=py26
 install:
     - pip install tox
-    # - pip install codecov
+    - pip install codecov
 script:
     - tox -e $TOX_ENV
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - codecov
+  # - bash <(curl -s https://codecov.io/bash)
