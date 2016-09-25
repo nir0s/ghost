@@ -1,3 +1,18 @@
+**0.3.0 (2016-09-25)**
+
+* Generated passphrase will now be printed to a file (`cwd/passphrase.ghost`) instead of to the screen.
+* Add 99% test coverage.
+* Support Python 3.
+* Remove logger in favor of `click`'s `echo`.
+* Allow to choose backend using the CLI.
+* Add `export` and `load` CLI commands and APIs to allow to export all keys in a stash to a file and then load them, potentially to a stash of a different backend.
+* Add `purge` API and CLI command to delete all keys in a stash.
+* Replace `--value` options with unlimited arguments in the form of `key=value` for the `value` field of a key.
+* Add `--no-decrypt` flag to the CLI when running `ghost get`.
+* Use SQLAlchemy PickleType for values in the SQLAlchemy Storage.
+* Add `-j` flag to jsonify key list.
+* Remove `T` from the timestamp in the `modified_at` and `created_at` fields of a key.
+
 **0.2.0 (2016-09-18)**
 
 * Replace simple-crypt with cryptography for a faster and more common encryption engine.
