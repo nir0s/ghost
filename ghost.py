@@ -64,13 +64,14 @@ class Stash(object):
     @property
     def key(self):
         if self._key is None:
+            passphrase = self.passphrase.encode('utf-8')
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=b'ghost',
                 iterations=1000000,
                 backend=default_backend())
-            self._key = base64.urlsafe_b64encode(kdf.derive(self.passphrase))
+            self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
         return self._key
 
     @property
@@ -85,7 +86,7 @@ class Stash(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             encrypted_value = self.cipher.encrypt(value.encode('utf8'))
-        hexified_value = binascii.hexlify(encrypted_value)
+        hexified_value = binascii.hexlify(encrypted_value).decode('ascii')
         return hexified_value
 
     def _decrypt(self, hexified_value):
@@ -94,7 +95,8 @@ class Stash(object):
         encrypted_value = binascii.unhexlify(hexified_value)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            jsonified_value = self.cipher.decrypt(encrypted_value)
+            jsonified_value = self.cipher.decrypt(
+                encrypted_value).decode('ascii')
         value = json.loads(jsonified_value)
         return value
 
@@ -476,7 +478,7 @@ passphrase_option = click.option(
     '--passphrase',
     envvar='GHOST_PASSPHRASE',
     required=True,
-    type=click.UNPROCESSED,
+    type=click.STRING,
     help='Stash Passphrase (Can be set via the `GHOST_PASSPHRASE` '
     'env var)')
 backend_option = click.option(
@@ -497,7 +499,7 @@ backend_option = click.option(
 @click.option('-p',
               '--passphrase',
               default=None,
-              type=click.UNPROCESSED,
+              type=click.STRING,
               help='Path to the stash')
 @click.option('--passphrase-size',
               default=12)

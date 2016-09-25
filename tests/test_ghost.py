@@ -147,7 +147,8 @@ class TestTinyDBStorage:
         storage = ghost.TinyDBStorage(stash_path)
         with pytest.raises(ghost.GhostError) as ex:
             storage.init()
-        assert 'Stash {0} already initialized'.format(stash_path) in ex.value
+        assert 'Stash {0} already initialized'.format(stash_path) \
+            in str(ex.value)
 
     def test_put(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
@@ -212,7 +213,8 @@ class TestSQLAlchemyStorage:
         storage = ghost.SQLAlchemyStorage('sqlite://' + stash_path)
         with pytest.raises(ghost.GhostError) as ex:
             storage.init()
-        assert 'Stash {0} already initialized'.format(stash_path) in ex.value
+        assert 'Stash {0} already initialized'.format(stash_path) \
+            in str(ex.value)
         os.remove(stash_path)
 
     def test_put(self, stash_path):
@@ -301,7 +303,7 @@ class TestStash:
         stash = ghost.Stash(storage, ['x'])
         with pytest.raises(ghost.GhostError) as ex:
             stash.init()
-        assert 'passphrase must be a non-empty string' in ex.value
+        assert 'passphrase must be a non-empty string' in str(ex.value)
 
     def test_put(self, test_stash):
         id = test_stash.put('aws', {'key': 'value'})
@@ -312,12 +314,12 @@ class TestStash:
     def test_put_no_value_provided(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.put('new-key')
-        assert 'You must provide a value for new keys' in ex.value
+        assert 'You must provide a value for new keys' in str(ex.value)
 
     def test_put_value_not_dict(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.put('aws', 'string')
-        assert 'Value must be of type dict' in ex.value
+        assert 'Value must be of type dict' in str(ex.value)
 
     def test_put_with_metadata_and_description(self, test_stash):
         id = test_stash.put(
@@ -388,7 +390,7 @@ class TestStash:
     def test_delete_nonexisting_key(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.delete('aws')
-        assert 'Key aws not found' in ex.value
+        assert 'Key aws not found' in str(ex.value)
 
     def test_list(self, test_stash):
         test_stash.put('aws', {'key': 'value'})
@@ -427,7 +429,7 @@ class TestStash:
     def test_export_no_keys(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.export(temp_file_path)
-        assert 'There are no keys to export' in ex.value
+        assert 'There are no keys to export' in str(ex.value)
 
     def test_load(self, test_stash):
         test_stash.put('aws', {'key': 'value'})
