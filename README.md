@@ -198,8 +198,6 @@ Values are encrypted once provided and decrypted only upon request, meaning that
 
 See [cryptography](https://cryptography.io/en/latest/)'s documentation for additional information.
 
-`ghost.generate_passphrase` receives a single argument which is the size of the passphrase to generate which is then base64 encoded. The default size is 32.
-
 
 ## Exporting and Importing
 
