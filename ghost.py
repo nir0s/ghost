@@ -23,6 +23,8 @@ import json
 import time
 import uuid
 import base64
+import random
+import string
 import binascii
 import warnings
 from datetime import datetime
@@ -380,8 +382,9 @@ def _get_current_time():
     return datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
 
 
-def generate_passphrase(size=32):
-    return base64.urlsafe_b64encode(os.urandom(size))
+def generate_passphrase(size=12):
+    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(size))
 
 
 class GhostError(Exception):
