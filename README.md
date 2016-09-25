@@ -39,8 +39,6 @@ pip install https://github.com/nir0s/ghost/archive/master.tar.gz
 
 ## Usage
 
-NOTE: The CLI currently only supports working with the TinyDB backend. To use the SQLAlchemy backend, use ghost directly from Python.
-
 ### CLI
 
 ```bash
@@ -152,6 +150,8 @@ The stash is empty. Go on, put some keys in there...
 ```
 
 NOTE: `--passphrase` and `--stash` can be supplied via the `GHOST_STASH_PATH` and `GHOST_PASSPHRASE` env vars.
+
+NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlchemy backend, you must either provide the `--stash` and `--backend` flags with every command or set the `--GHOST_STASH_PATH` and `--GHOST_BACKEND` env vars after having initialized the stash. Not providing the stash path and the backend will make ghost fail misrebly.
 
 ### Directly from Python
 

@@ -1,4 +1,4 @@
-Repex
+ghost
 =====
 
-See `Official Github Repo <https://github.com/cloudify-cosmo/repex>`_.
+See `Official Github Repo <https://github.com/nir0s/ghost>`_.

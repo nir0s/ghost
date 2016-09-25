@@ -335,12 +335,21 @@ class SQLAlchemyStorage(object):
         """
         return self.db.execute(self.keys.insert(), **key).lastrowid
 
+    def _construct_key(self, values):
+        """Returns a dictionary representing a key from a list of columns
+        and a tuple of values
+        """
+        key = {}
+        for column, value in zip(self.keys.columns, values):
+            key.update({column.name: value})
+        return key
+
     def list(self):
-        keys = self.db.execute(sql.select([self.keys]))
-        all_keys = []
-        for key in keys:
-            all_keys.append(key[0])
-        return all_keys
+        all_key_values = self.db.execute(sql.select([self.keys]))
+        key_list = []
+        for key_values in all_key_values:
+            key_list.append(self._construct_key(key_values))
+        return key_list
 
     def get(self, key_name):
         results = self.db.execute(sql.select(
@@ -355,10 +364,7 @@ class SQLAlchemyStorage(object):
             key_values = result
         if not key_values:
             return {}
-        key = {}
-        for column, value in zip(self.keys.columns, key_values):
-            key.update({column.name: value})
-        return key
+        return self._construct_key(key_values)
 
     def delete(self, key_name):
         result = self.db.execute(
@@ -443,6 +449,13 @@ CLICK_CONTEXT_SETTINGS = dict(
     help_option_names=['-h', '--help'],
     token_normalize_func=lambda param: param.lower())
 
+# Currently static. We'll see how backend implementations go and adjust
+# to dymanic mapping accordingly
+STORAGE_NAME_MAPPING = {
+    'tinydb': TinyDBStorage,
+    'sqlalchemy': SQLAlchemyStorage,
+}
+
 
 @click.group(context_settings=CLICK_CONTEXT_SETTINGS)
 def main():
@@ -466,6 +479,15 @@ passphrase_option = click.option(
     type=click.UNPROCESSED,
     help='Stash Passphrase (Can be set via the `GHOST_PASSPHRASE` '
     'env var)')
+backend_option = click.option(
+    '-b',
+    '--backend',
+    envvar='GHOST_BACKEND_TYPE',
+    default='tinydb',
+    type=click.Choice(STORAGE_NAME_MAPPING.keys()),
+    help='Storage backend for the stash [{0}] (Can be set via the '
+    '`GHOST_BACKEND_TYPE` env var)'.format(
+        STORAGE_NAME_MAPPING.keys()))
 
 
 @main.command(name='init', short_help='Init a stash')
@@ -479,7 +501,13 @@ passphrase_option = click.option(
               help='Path to the stash')
 @click.option('--passphrase-size',
               default=12)
-def init_stash(stash_path, passphrase, passphrase_size):
+@click.option('-b',
+              '--backend',
+              default='tinydb',
+              type=click.Choice(STORAGE_NAME_MAPPING.keys()),
+              help='Storage backend for the stash [{0}]'.format(
+                  STORAGE_NAME_MAPPING.keys()))
+def init_stash(stash_path, passphrase, passphrase_size, backend):
     """Init a stash
 
     `STASH_PATH` is the path to the stash. If this isn't supplied,
@@ -493,7 +521,7 @@ def init_stash(stash_path, passphrase, passphrase_size):
     export GHOST_PASSPHRASE=$(cat passphrase.ghost)
     """
     click.echo('Initializing stash...')
-    storage = TinyDBStorage(db_path=stash_path)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     passphrase_file_name = 'passphrase.ghost'
     try:
@@ -527,13 +555,15 @@ def init_stash(stash_path, passphrase, passphrase_size):
               help='Whether to modify an existing key if it exists')
 @stash_option
 @passphrase_option
+@backend_option
 def put_key(key_name,
             value,
             description,
             meta,
             modify,
             stash,
-            passphrase):
+            passphrase,
+            backend):
     """Insert a key to the stash
 
     `KEY_NAME` is the name of the key to insert
@@ -542,7 +572,7 @@ def put_key(key_name,
     it is the encrypted value of your key
     """
     click.echo('Stashing key...')
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
@@ -568,14 +598,15 @@ def put_key(key_name,
               help='Retrieve the key without decrypting its value')
 @stash_option
 @passphrase_option
-def get_key(key_name, jsonify, no_decrypt, stash, passphrase):
+@backend_option
+def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
     """Retrieve a key from the stash
 
     `KEY_NAME` is the name of the key to retrieve
     """
     if not jsonify:
         click.echo('Retrieving key...')
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key_name=key_name, decrypt=not no_decrypt)
     if not record:
@@ -590,13 +621,14 @@ def get_key(key_name, jsonify, no_decrypt, stash, passphrase):
 @click.argument('KEY_NAME')
 @stash_option
 @passphrase_option
-def delete_key(key_name, stash, passphrase):
+@backend_option
+def delete_key(key_name, stash, passphrase, backend):
     """Delete a key from the stash
 
     `KEY_NAME` is the name of the key to delete
     """
     click.echo('Deleting key...')
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.delete(key_name=key_name)
@@ -612,12 +644,13 @@ def delete_key(key_name, stash, passphrase):
               help='Output in JSON instead')
 @stash_option
 @passphrase_option
-def list_keys(jsonify, stash, passphrase):
+@backend_option
+def list_keys(jsonify, stash, passphrase, backend):
     """List all keys in the stash
     """
     if not jsonify:
         click.echo('Listing all keys in {0}...'.format(stash))
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
     if not keys:
@@ -636,11 +669,12 @@ def list_keys(jsonify, stash, passphrase):
               help='This flag is mandatory to perform a purge')
 @stash_option
 @passphrase_option
-def purge_stash(force, stash, passphrase):
+@backend_option
+def purge_stash(force, stash, passphrase, backend):
     """Purge the stash from all of its keys
     """
     click.echo('Purging stash {0}...'.format(stash))
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.purge(force)
@@ -657,11 +691,12 @@ def purge_stash(force, stash, passphrase):
               help='Save exported keys in a file')
 @stash_option
 @passphrase_option
-def export_keys(output_path, stash, passphrase):
+@backend_option
+def export_keys(output_path, stash, passphrase, backend):
     """Export all keys to a file
     """
     click.echo('Exporting stash {0} to {1}...'.format(stash, output_path))
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.export(output_path=output_path)
@@ -673,12 +708,13 @@ def export_keys(output_path, stash, passphrase):
 @click.argument('KEY_FILE')
 @stash_option
 @passphrase_option
-def load_keys(key_file, stash, passphrase):
+@backend_option
+def load_keys(key_file, stash, passphrase, backend):
     """Loads all keys from an exported key file to the stash
 
     `KEY_FILE` is the exported stash file to load keys from
     """
     click.echo('Import all keys from {0} to {1}...'.format(key_file, stash))
-    storage = TinyDBStorage(db_path=stash)
+    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     stash.load(key_file=key_file)

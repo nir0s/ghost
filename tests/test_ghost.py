@@ -237,7 +237,7 @@ class TestSQLAlchemyStorage:
         storage.put(key)
         key_list = storage.list()
         assert len(key_list) == 1
-        assert key['name'] in key_list
+        assert key['name'] == key_list[0]['name']
 
     def test_empty_list(self, stash_path):
         storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
@@ -464,6 +464,7 @@ def test_cli_stash(stash_path):
     with open('passphrase.ghost') as passphrase_file:
         passphrase = passphrase_file.read()
     os.environ['GHOST_PASSPHRASE'] = passphrase
+    os.environ['GHOST_BACKEND_TYPE'] = 'tinydb'
     yield ghost.Stash(ghost.TinyDBStorage(stash_path), passphrase)
     os.remove('passphrase.ghost')
     os.remove(stash_path)
