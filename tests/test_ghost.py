@@ -45,10 +45,10 @@ class TestUtils:
 
     def test_generate_passphrase(self):
         passphrase = ghost.generate_passphrase()
-        assert len(passphrase) == 12
+        assert len(passphrase) == 44
         assert isinstance(passphrase, str)
         longer_passphrase = ghost.generate_passphrase(13)
-        assert len(longer_passphrase) == 13
+        assert len(longer_passphrase) == 20
 
     def test_build_dict_from_key_value(self):
         key_values = ['a=b', 'c=d']
