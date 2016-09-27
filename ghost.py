@@ -30,6 +30,7 @@ import warnings
 from datetime import datetime
 
 import click
+from appdirs import user_data_dir
 from tinydb import TinyDB, Query
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -48,7 +49,7 @@ except ImportError:
     SQLALCHEMY_EXISTS = False
 
 
-GHOST_HOME = os.path.expanduser(os.path.join('~', '.ghost'))
+GHOST_HOME = user_data_dir('ghost')
 DEFAULT_STASH_PATH = os.path.join(GHOST_HOME, 'stash.json')
 DEFAULT_SQLITE_STASH_PATH = 'sqlite:///{0}/stash.sql'.format(GHOST_HOME)
 
