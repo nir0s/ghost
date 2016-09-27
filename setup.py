@@ -23,9 +23,9 @@ setup(
     py_modules=['ghost'],
     entry_points={'console_scripts': ['ghost = ghost:main']},
     install_requires=[
-        "appdirs==1.4.0",
         "click==6.6",
         "tinydb==3.2.1",
+        "appdirs==1.4.0",
         "cryptography>=1.5"
     ],
     classifiers=[
