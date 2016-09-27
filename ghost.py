@@ -30,8 +30,8 @@ import warnings
 from datetime import datetime
 
 import click
-from appdirs import user_data_dir
 from tinydb import TinyDB, Query
+from appdirs import user_data_dir
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
