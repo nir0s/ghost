@@ -13,8 +13,7 @@
 # limitations under the License.
 
 # TODO: Add categories
-# TODO: Output phrase to file during `init`
-# TODO: Output key to file during `get`
+# TODO: Document how to export a key to a file using bash redirection
 
 
 import os
@@ -33,9 +32,9 @@ import click
 from tinydb import TinyDB, Query
 from appdirs import user_data_dir
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 try:
     from sqlalchemy import (Column,
                             Table,
