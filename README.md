@@ -63,16 +63,16 @@ Commands:
 # Initializing a stash
 $ ghost init
 Initializing stash...
-Initialized stash at: /home/nir0s/.ghost/stash.json
+Initialized stash at: /home/nir0s/.local/share/ghost/stash.json
 Your passphrase can be found under the `passphrase.ghost` file in the current directory
 Make sure you save your passphrase somewhere safe. If lost, any access to your stash will be impossible.
 ...
 
-$ export GHOST_STASH_PATH='~/.ghost/my_stash.json'
+$ export GHOST_STASH_PATH='~/.local/share/ghost/my_stash.json'
 $ export GHOST_PASSPHRASE=$(cat passphrase.ghost)
 
 $ ghost list
-Listing all keys in ~/.ghost/my_stash.json...
+Listing all keys in ~/.local/share/ghost/my_stash.json...
 The stash is empty. Go on, put some keys in there...
 
 # Putting keys in the stash
@@ -127,7 +127,7 @@ Name:          gcp
 
 # Listing the existing keys
 $ ghost list
-Listing all keys in ~/.ghost/my_stash.json...
+Listing all keys in ~/.local/share/ghost/my_stash.json...
 Available Keys:
   - aws
   - gcp
@@ -139,10 +139,10 @@ Deleting key...
 
 # Deleting all keys
 $ ghost purge -f
-Purging stash /home/nir0s/.ghost/stash.json...
+Purging stash ~/.local/share/ghost/my_stash.json...
 
 $ ghost list
-Listing all keys in ~/my_stash.json...
+Listing all keys in ~/.local/share/ghost/my_stash.json...
 The stash is empty. Go on, put some keys in there...
 ...
 ```
@@ -157,7 +157,7 @@ NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlche
 import ghost
 
 # Initialize a new stash
-storage = TinyDBStorage(db_path='~/.ghost/stash.json')
+storage = TinyDBStorage(db_path='~/.local/share/ghost/stash.json')
 # Can also generate a passphrase via `ghost.generate_passphrase(passphrase_size=20)`
 stash = Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
