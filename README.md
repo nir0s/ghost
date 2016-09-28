@@ -16,11 +16,11 @@ ghost aims to provide a secret-store with a single, simple-to-use API supporting
 
 * While [Vault](http://vaultproject.io) is truly spectacular and I've been using it for quite a while now, it requires a server running.
 * [Credstash](https://github.com/fugue/credstash) is only AWS KMS based. 
+* [Keywhiz](https://github.com/square/keywhiz), like vault, also requires a server.. and let's face it, I ain't gonna run Java on my laptop just for that thank you.
 * [Unicreds](https://github.com/Versent/unicreds) is based on credstash and, again, only supports KMS.
 * [Sops](https://github.com/mozilla/sops) is complicated to use and also is KMS based. 
 * There's a new project called [sstash](https://github.com/realcr/sstash), but it only supports file based encryption and is not intuitive enough as I see it. 
 * Google developed something called [Keyczar](https://github.com/google/keyczar), but it doesn't seem to be under development.
-* [Keywhiz](https://github.com/square/keywhiz), like vault, also requires a server.. and let's face it, I ain't gonna run Java on my laptop just for that thank you.
 
 
 ## Installation
@@ -81,15 +81,15 @@ Stashing key...
 $ ghost put gcp token=my_token --description "GCP Token" --meta Owner=Me --meta Exp=15.06.17
 ...
 
-# Retrieving a key
+# Retrieving a key (alternatively, bash redirect to file - `ghost get aws` > file)
 $ ghost get aws
 Retrieving key...
 
 Description:   None
 Uid:           08ee6102-5668-440f-b583-97a1c7a17e5a
-Created_At:    2016-09-15T15:10:01
+Created_At:    2016-09-15 15:10:01
 Metadata:      None
-Modified_At:   2016-09-15T15:10:01
+Modified_At:   2016-09-15 15:10:01
 Value:         access=my_access;secret=my_secret;
 Name:          aws
 
@@ -98,12 +98,12 @@ $ ghost get gcp -j
 {
     "description": "My GCP Token", 
     "uid": "b8552219-8761-4179-b20d-0a1544dd91a3", 
-    "created_at": "2016-09-15T15:22:53", 
+    "created_at": "2016-09-15 15:22:53", 
     "metadata": {
         "Owner": "Me", 
         "ExpirationDate": "15.06.17"
     }, 
-    "modified_at": "2016-09-15T15:23:46", 
+    "modified_at": "2016-09-15 15:23:46", 
     "value": {
         "token": "my_token"
     }, 
@@ -119,9 +119,9 @@ Retrieving key...
 
 Description:   My GCP Token
 Uid:           789a3705-044c-4e34-b720-4bc43bfbae90
-Created_At:    2016-09-15T15:56:04
+Created_At:    2016-09-15 15:56:04
 Metadata:      Owner=Me;ExpirationDate=15.06.17;
-Modified_At:   2016-09-15T15:57:05
+Modified_At:   2016-09-15 15:57:05
 Value:         token=my_modified_token;
 Name:          gcp
 
@@ -158,7 +158,7 @@ import ghost
 
 # Initialize a new stash
 storage = TinyDBStorage(db_path='~/.local/share/ghost/stash.json')
-# Can also generate a passphrase via `ghost.generate_passphrase(passphrase_size=20)`
+# Can also generate a passphrase via `ghost.generate_passphrase(size=20)`
 stash = Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
 
@@ -235,5 +235,13 @@ tox
 ```
 
 ## Contributions..
+
+You can add additional backends by implementing a single class which implements the `init`, `put`, `get`, `delete` and `list` methods. Both the TinyDB and SQLAlchemy implementations are extremely lightweight and can be used as reference implementations.
+
+* `init` should do whatever is required to initialize the database in which the keys will be held.
+* `put` should insert a key dict into the database and return its id.
+* `get` should return the key dict
+* `delete` should delete the key and return a boolean representing whether it was deleted or not.
+* `list` should return a list of all keys. 
 
 Pull requests are always welcome..
