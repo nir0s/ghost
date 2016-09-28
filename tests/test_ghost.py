@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import os
+import mock
 import time
 import json
 import shlex
+import base64
 import shutil
 import tempfile
 
@@ -257,6 +259,133 @@ class TestSQLAlchemyStorage:
         storage.delete('my_key')
         retrieved_key = storage.get('my_key')
         assert retrieved_key == {}
+
+
+class TestConsulStorage:
+    def test_no_requests(self):
+        """Without requests, an error is thrown as soon as possible."""
+        with mock.patch('ghost.REQUESTS_EXISTS', False):
+            with pytest.raises(ImportError):
+                ghost.ConsulStorage()
+
+    def test_get_400(self):
+        """Unhandled errors from consul are turned into a GhostError."""
+        storage = ghost.ConsulStorage()
+
+        def mock_get(url):
+            return mock.Mock(status_code=400)
+
+        with mock.patch.object(storage._session, 'get', side_effect=mock_get):
+            with pytest.raises(ghost.GhostError):
+                storage.get('key_name')
+
+    def test_get_decode(self):
+        """ConsulStorage can decode data in the format returned by consul."""
+        original_key = {'secret': 42}
+        storage = ghost.ConsulStorage()
+
+        def mock_get(url):
+            resp = mock.Mock()
+            resp.status_code = 200
+            # consul returns the data jsonified and base64-encoded
+            json_bytes = json.dumps(original_key).encode('utf-8')
+            resp.json.return_value = \
+                [{'Value': base64.b64encode(json_bytes)}]
+            return resp
+
+        with mock.patch.object(storage._session, 'get',
+                               side_effect=mock_get) as m:
+            retrieved_key = storage.get('key_name')
+
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/key_name')
+        assert retrieved_key == original_key
+
+    def test_get_404(self):
+        """Getting a nonexistent key returns an empty dict."""
+        storage = ghost.ConsulStorage()
+
+        def mock_get(url):
+            return mock.Mock(status_code=404)
+
+        with mock.patch.object(storage._session, 'get',
+                               side_effect=mock_get) as m:
+            retrieved_key = storage.get('nonexistent')
+
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/nonexistent')
+        assert retrieved_key == {}
+
+    def test_list(self):
+        """Listing keys returns the whole stored objects."""
+        storage = ghost.ConsulStorage(directory='foo/bar')
+        original_key = {'secret': 42, 'name': 'baz'}
+
+        def mock_get(url):
+            resp = mock.Mock()
+            resp.status_code = 200
+            json_bytes = json.dumps(original_key).encode('utf-8')
+            resp.json.return_value = [
+                {'Value': base64.b64encode(json_bytes), 'Key': 'foo/bar/baz'}
+            ]
+            return resp
+
+        with mock.patch.object(storage._session, 'get',
+                               side_effect=mock_get) as m:
+            retrieved_keys = storage.list()
+
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/foo/bar/?recurse')
+        assert retrieved_keys == [original_key]
+
+    def test_put(self):
+        """Putting takes the key_name from the passed in dict."""
+        storage = ghost.ConsulStorage()
+        original_key = {'name': 'the_name', 'value': 42}
+
+        def mock_put(url, json):
+            # assert here, because using `assert_called_with` would
+            # make an assumption if the args were passed positionally or by
+            # name
+            assert url == 'http://127.0.0.1:8500/v1/kv/ghost/the_name'
+            assert json == original_key
+
+            resp = mock.Mock()
+            resp.status_code = 200
+            resp.json.return_value = json['name']
+            return resp
+
+        with mock.patch.object(storage._session, 'put',
+                               side_effect=mock_put) as m:
+            inserted_key = storage.put(original_key)
+
+        assert len(m.mock_calls) == 1
+        assert inserted_key == 'the_name'
+
+    def test_delete(self):
+        """Deleting an existing key simply returns True"""
+        storage = ghost.ConsulStorage()
+
+        def mock_delete(url):
+            return mock.Mock(status_code=200)
+
+        with mock.patch.object(storage._session, 'delete',
+                               side_effect=mock_delete) as m:
+            deleted = storage.delete('to_delete')
+
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/to_delete')
+        assert deleted
+
+    def test_delete_404(self):
+        """Deleting a nonexisting key returns False"""
+        storage = ghost.ConsulStorage()
+
+        def mock_delete(url):
+            return mock.Mock(status_code=404)
+
+        with mock.patch.object(storage._session, 'delete',
+                               side_effect=mock_delete) as m:
+            deleted = storage.delete('to_delete')
+
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/to_delete')
+        assert not deleted
 
 
 TEST_PASSPHRASE = 'a'
