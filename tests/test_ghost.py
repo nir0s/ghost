@@ -185,6 +185,12 @@ class TestTinyDBStorage:
 
 
 class TestSQLAlchemyStorage:
+    def test_no_sqlalchemy(self):
+        """Without sqlalchemy, an error is thrown as soon as possible."""
+        with mock.patch('ghost.SQLALCHEMY_EXISTS', False):
+            with pytest.raises(ImportError):
+                ghost.SQLAlchemyStorage()
+
     def test_init(self):
         tmpdir = os.path.join(tempfile.mkdtemp())
         shutil.rmtree(tmpdir)
@@ -280,7 +286,8 @@ class TestConsulStorage:
                 storage.get('key_name')
 
     def test_get_decode(self):
-        """ConsulStorage can decode data in the format returned by consul."""
+        """The ConsulStorage can decode data in the format returned by consul.
+        """
         original_key = {'secret': 42}
         storage = ghost.ConsulStorage()
 
