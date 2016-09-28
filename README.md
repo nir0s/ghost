@@ -178,14 +178,13 @@ stash.delete('aws')
 
 ## Backends
 
-Currently, only two backends are provided.
+The supported backends are:
 
 * [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
 * [SQLAlchemy](http://www.sqlalchemy.org) (Tested on v1.0.15) (Note that the SQLAlchemyStorage supports any SQLAlchemy connection string. The default one is sqlite)
+* [Consul](http://www.consul.io)
 
-NOTE: ghost doesn't install SQLAlchemy by default or any other backend other than TinyDB for that matter. Please Install SQLAlchemy separately if you need to use its backend.
-
-I'd like to also support Vault in addition to KMS and any other cloud provider based key stores.
+NOTE: ghost includes dependencies required for TinyDB only. `optional-requirements.txt` contain dependencies for other backends.
 
 
 ## Encryption & Decryption

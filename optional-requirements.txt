@@ -1,0 +1,4 @@
+# Consul Backend
+requests>=2.11.1
+# SQLAlchemy Backend
+sqlalchemy>=1.0.15
