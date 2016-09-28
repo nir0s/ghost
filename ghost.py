@@ -29,7 +29,13 @@ import binascii
 import warnings
 from datetime import datetime
 
+try:
+    from urllib.parse import urljoin
+except ImportError:
+    from urlparse import urljoin
+
 import click
+
 from tinydb import TinyDB, Query
 from appdirs import user_data_dir
 from cryptography.fernet import Fernet
@@ -47,6 +53,12 @@ try:
     SQLALCHEMY_EXISTS = True
 except ImportError:
     SQLALCHEMY_EXISTS = False
+
+try:
+    import requests
+    REQUESTS_EXISTS = True
+except ImportError:
+    REQUESTS_EXISTS = False
 
 
 GHOST_HOME = user_data_dir('ghost')
@@ -375,6 +387,63 @@ class SQLAlchemyStorage(object):
         return result.rowcount > 0
 
 
+class ConsulStorage(object):
+    def __init__(self,
+                 db_path='http://127.0.0.1:8500',
+                 directory='ghost',
+                 verify=True,
+                 client_cert=None,
+                 auth=None):
+        if not REQUESTS_EXISTS:
+            raise ImportError('Requests must be installed first')
+        self._url = urljoin(db_path, 'v1/kv/{0}/'.format(directory))
+        self._session = requests.Session()
+        self._session.verify = verify
+        self._session.cert = client_cert
+        self._session.auth = auth
+
+    def _key_url(self, key):
+        return urljoin(self._url, key)
+
+    def _consul_request(self, method, url, *args, **kwargs):
+        handler = getattr(self._session, method.lower())
+        response = handler(url, *args, **kwargs)
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            raise GhostError('{0} {1} returned {2}: {3}'.format(
+                             method, url, response.status_code,
+                             response.content))
+        return response.json()
+
+    def init(self):
+        """Consul creates directories on the fly, so no init is required."""
+
+    def put(self, key):
+        """
+        `key` is the dictionary representing the key
+        """
+        return self._consul_request(
+            'PUT', self._key_url(key['name']), json=key)
+
+    def list(self):
+        keys = self._consul_request('GET', self._url + '?keys')
+        # keys contain the whole path, we just want the last segment
+        return [os.path.basename(k) for k in keys]
+
+    def get(self, key_name):
+        value = self._consul_request('GET', self._key_url(key_name))
+        if value is None:
+            return {}
+        # consul returns [{'Value': base64encoded}]. Yes, this means the
+        # ciphertext is actually also base64encoded, and jsonified - by consul,
+        # independently.
+        return json.loads(base64.b64decode(value[0]['Value']).decode('utf-8'))
+
+    def delete(self, key_name):
+        return self._consul_request('DELETE', self._key_url(key_name))
+
+
 def _get_current_time():
     """Returns a human readable unix timestamp formatted string
 
@@ -453,10 +522,11 @@ CLICK_CONTEXT_SETTINGS = dict(
     token_normalize_func=lambda param: param.lower())
 
 # Currently static. We'll see how backend implementations go and adjust
-# to dymanic mapping accordingly
+# to dynamic mapping accordingly
 STORAGE_NAME_MAPPING = {
     'tinydb': TinyDBStorage,
     'sqlalchemy': SQLAlchemyStorage,
+    'consul': ConsulStorage
 }
 
 
