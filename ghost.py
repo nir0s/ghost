@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # TODO: Add categories
+# TODO: Add ghost backend which exports and loads stuff
 # TODO: Document how to export a key to a file using bash redirection
 
 
@@ -60,12 +61,19 @@ try:
 except ImportError:
     REQUESTS_EXISTS = False
 
+try:
+    import hvac
+    HVAC_EXISTS = True
+except ImportError:
+    HVAC_EXISTS = False
+
 
 GHOST_HOME = user_data_dir('ghost')
 STORAGE_DEFAULT_PATH_MAPPING = {
     'tinydb': os.path.join(GHOST_HOME, 'stash.json'),
     'sqlalchemy': 'sqlite:///{0}/stash.sql'.format(GHOST_HOME),
-    'consul': 'http://127.0.0.1:8500'
+    'consul': 'http://127.0.0.1:8500',
+    'vault': 'http://127.0.0.1:8200'
 }
 
 
@@ -221,7 +229,7 @@ class Stash(object):
                 if key['name'] != 'stored_passphrase']
 
     def purge(self, force=False):
-        """Purges the stash from all keys
+        """Purge the stash from all keys
         """
         if not force:
             raise GhostError(
@@ -232,7 +240,7 @@ class Stash(object):
             self.delete(key_name)
 
     def export(self, output_path=None):
-        """Exports all keys in the stash to a list or a file
+        """Export all keys in the stash to a list or a file
         """
         all_keys = []
         for key in self.list():
@@ -249,7 +257,7 @@ class Stash(object):
             raise GhostError('There are no keys to export')
 
     def load(self, keys=None, key_file=None):
-        """Imports keys to the stash from either a list of keys or a file
+        """Import keys to the stash from either a list of keys or a file
 
         `keys` is a list of dictionaries created by `self.export`
         `stash_path` is a path to a file created by `self.export`
@@ -354,7 +362,7 @@ class SQLAlchemyStorage(object):
         return self.db.execute(self.keys.insert(), **key).lastrowid
 
     def _construct_key(self, values):
-        """Returns a dictionary representing a key from a list of columns
+        """Return a dictionary representing a key from a list of columns
         and a tuple of values
         """
         key = {}
@@ -451,8 +459,66 @@ class ConsulStorage(object):
         return self._consul_request('DELETE', self._key_url(key_name))
 
 
+class VaultStorage(object):
+    def __init__(self,
+                 db_path=STORAGE_DEFAULT_PATH_MAPPING['vault'],
+                 token=None or os.environ.get('VAULT_TOKEN'),
+                 cert=None,
+                 path='secret'):
+
+        if not HVAC_EXISTS:
+            raise ImportError('hvac must be installed first')
+
+        if not token:
+            raise GhostError(
+                'The `VAULT_TOKEN` env var must be set to use this storage '
+                'type')
+
+        self.client = hvac.Client(url=db_path, token=token, cert=cert)
+        self.path = path
+
+    def _key_path(self, key_name):
+        return os.path.join(self.path, key_name)
+
+    def init(self):
+        """
+        """
+
+    def put(self, key):
+        self.client.write(self._key_path(key['name']), **key)
+
+    def list(self):
+        keys = self.client.list(self.path)
+        keys = keys['data']['keys']
+        if not keys:
+            return []
+        key_list = []
+        for key_name in keys:
+            # raise Exception(self.get(key_name))
+            key_list.append(self.get(key_name))
+        return key_list
+
+    @staticmethod
+    def _convert_vault_record_to_ghost_record(vault_record):
+        ghost_record = dict(**vault_record['data'])
+        ghost_record['metadata'] = ghost_record.get('metadata') or {}
+        del vault_record['data']
+        ghost_record['metadata'].update(vault_record)
+        return ghost_record
+
+    def get(self, key_name):
+        vault_record = self.client.read(self._key_path(key_name))
+        if not vault_record:
+            return {}
+        return self._convert_vault_record_to_ghost_record(vault_record)
+
+    def delete(self, key_name):
+        self.client.delete(self._key_path(key_name))
+        return self.get(key_name) == {}
+
+
 def _get_current_time():
-    """Returns a human readable unix timestamp formatted string
+    """Return a human readable unix timestamp formatted string
 
     e.g. 2015-06-11 10:10:01
     """
@@ -460,6 +526,9 @@ def _get_current_time():
 
 
 def generate_passphrase(size=12):
+    """Return a generate string `size` long based on lowercase, uppercase,
+    and digit chars
+    """
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(size))
 
@@ -533,7 +602,8 @@ CLICK_CONTEXT_SETTINGS = dict(
 STORAGE_NAME_MAPPING = {
     'tinydb': TinyDBStorage,
     'sqlalchemy': SQLAlchemyStorage,
-    'consul': ConsulStorage
+    'consul': ConsulStorage,
+    'vault': VaultStorage
 }
 
 
@@ -587,7 +657,7 @@ backend_option = click.option(
               help='Storage backend for the stash [{0}]'.format(
                   STORAGE_NAME_MAPPING.keys()))
 def init_stash(stash_path, passphrase, passphrase_size, backend):
-    """Init a stash
+    r"""Init a stash
 
     `STASH_PATH` is the path to the stash. If this isn't supplied,
     a default path will be used.
@@ -621,7 +691,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
 
 @main.command(name='put', short_help='Insert a key to the stash')
 @click.argument('KEY_NAME')
-@click.argument('VALUE', nargs=-1)
+@click.argument('VALUE', nargs=-1, required=True)
 @click.option('-d',
               '--description',
               help="The key's description")
@@ -796,7 +866,7 @@ def export_keys(output_path, stash, passphrase, backend):
 @passphrase_option
 @backend_option
 def load_keys(key_file, stash, passphrase, backend):
-    """Loads all keys from an exported key file to the stash
+    """Load all keys from an exported key file to the stash
 
     `KEY_FILE` is the exported stash file to load keys from
     """
