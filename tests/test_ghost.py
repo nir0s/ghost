@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import mock
 import time
 import json
 import shlex
@@ -21,6 +20,8 @@ import base64
 import shutil
 import tempfile
 
+import mock
+import hvac  # NOQA
 import pytest
 import click.testing as clicktest
 
@@ -29,6 +30,9 @@ from sqlalchemy import inspect
 from sqlalchemy import create_engine
 
 import ghost
+
+
+TEST_PASSPHRASE = 'a'
 
 
 def _invoke(command):
@@ -395,7 +399,107 @@ class TestConsulStorage:
         assert not deleted
 
 
-TEST_PASSPHRASE = 'a'
+class HvacClient(object):
+    def __init__(self, url, token=None, cert=None):
+        self.store = {}
+
+    def list(self, path='secret'):
+        """
+        {
+            'lease_id': '',
+            'warnings': None,
+            'wrap_info': None,
+            'auth': None,
+            'lease_duration': 0,
+            'request_id': 'a0d5c74c-fe92-90ba-f73a-95b08cd4ec61',
+            'data': {
+                'keys': ['aws', 'aws2', 'awss', 'gcp', 'stored_passphrase']
+            },
+            'renewable': False
+        }
+        """
+        return {
+            'data': {
+                'keys': self.store.keys()
+            }
+        }
+
+    def read(self, path):
+        """
+        {
+            'lease_id': '',
+            'warnings': None,
+            'wrap_info': None,
+            'auth': None,
+            'lease_duration': 2592000,
+            'request_id': 'accdb21c-5b70-06e7-c38a-4a589e9dd5d3',
+            'data': {
+                'uid': '0c5ce284-1300-4892-9e00-15e27e3db0d2',
+                'created_at': '2016-10-06 08:29:53',
+                'modified_at': '2016-10-06 08:29:53',
+                'value': 'encrypted_value',
+                'name': 'aws',
+                'metadata': None,
+                'description': None
+            },
+            'renewable': False
+        }
+        """
+        return self.store.get(os.path.basename(path))
+
+    def write(self, path, **kwargs):
+        key = {'data': dict(**kwargs), 'vault_metadata': 'x'}
+        self.store[os.path.basename(path)] = key
+
+    def delete(self, path):
+        self.store.pop(os.path.basename(path))
+
+
+class TestVaultStorage:
+    def test_no_hvac(self):
+        with mock.patch('ghost.HVAC_EXISTS', False):
+            with pytest.raises(ImportError):
+                ghost.VaultStorage()
+
+    def test_init_no_token(self):
+        with pytest.raises(ghost.GhostError) as ex:
+            ghost.VaultStorage()
+        assert 'The `VAULT_TOKEN` env var' in str(ex)
+
+    def test_key_path(self):
+        storage = ghost.VaultStorage(token='a')
+        assert storage._key_path('my_key') == 'secret/my_key'
+
+    @mock.patch('hvac.Client', HvacClient)
+    def test_put_get_delete(self):
+        storage = ghost.VaultStorage(token='a')
+        storage.put({'name': 'aws', 'value': {'x': 'y'}})
+        expected_key = {
+            'name': 'aws',
+            'value': {'x': 'y'},
+            'metadata': {'vault_metadata': 'x'}
+        }
+        assert expected_key == storage.get('aws')
+        storage.delete('aws')
+        assert storage.get('aws') == {}
+
+    @mock.patch('hvac.Client', HvacClient)
+    def test_empty_list(self):
+        storage = ghost.VaultStorage(token='a')
+        assert storage.list() == []
+
+    @mock.patch('hvac.Client', HvacClient)
+    def test_list(self):
+        storage = ghost.VaultStorage(token='a')
+        expected_key = {
+            'name': 'aws',
+            'value': {'x': 'y'},
+            'metadata': {'vault_metadata': 'x'}
+        }
+        storage.put({'name': 'aws', 'value': {'x': 'y'}})
+        key_list = storage.list()
+        assert len(key_list) == 1
+        assert key_list[0] == expected_key
 
 
 @pytest.fixture

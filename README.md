@@ -183,6 +183,7 @@ The supported backends are:
 * [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
 * [SQLAlchemy](http://www.sqlalchemy.org) (Tested on v1.0.15) (Note that the SQLAlchemyStorage supports any SQLAlchemy connection string. The default one is sqlite)
 * [Consul](http://www.consul.io)
+* [Vault](http://www.vaultproject.io)
 
 NOTE: ghost includes dependencies required for TinyDB only. `optional-requirements.txt` contain dependencies for other backends.
 
