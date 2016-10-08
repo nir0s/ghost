@@ -16,6 +16,7 @@
 # TODO: Add ghost backend which exports and loads stuff
 # TODO: Document how to export a key to a file using bash redirection
 
+from __future__ import unicode_literals
 
 import os
 import sys
@@ -80,7 +81,8 @@ STORAGE_DEFAULT_PATH_MAPPING = {
 class Stash(object):
     def __init__(self, storage, passphrase=None, passphrase_size=12):
         self._storage = storage
-        self.passphrase = passphrase or generate_passphrase(passphrase_size)
+        passphrase = passphrase or generate_passphrase(passphrase_size)
+        self.passphrase = passphrase
 
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
@@ -137,10 +139,6 @@ class Stash(object):
         return existing_key
 
     def init(self):
-        if not isinstance(self.passphrase, (str, bytes)) \
-                or not self.passphrase:
-            raise GhostError('passphrase must be a non-empty string')
-
         self._storage.init()
         self.put(
             name='stored_passphrase',
@@ -152,7 +150,8 @@ class Stash(object):
             value=None,
             modify=False,
             metadata=None,
-            description=''):
+            description='',
+            encrypt=True):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -178,7 +177,7 @@ class Stash(object):
 
         Returns the id of the key in the database
         """
-        if value and not isinstance(value, dict):
+        if value and encrypt and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
         # `existing_key` will be an empty dict if it doesn't exist
         existing_key = self._handle_existing_key(name, modify)
@@ -192,7 +191,11 @@ class Stash(object):
 
         modified_at = _get_current_time()
 
-        value = self._encrypt(value) or existing_key.get('value')
+        if value:
+            if encrypt:
+                value = self._encrypt(value)
+        else:
+            value = existing_key.get('value')
         description = description or existing_key.get('description')
         metadata = metadata or existing_key.get('metadata')
 
@@ -239,7 +242,7 @@ class Stash(object):
         for key_name in self.list():
             self.delete(key_name)
 
-    def export(self, output_path=None):
+    def export(self, output_path=None, decrypt=False):
         """Export all keys in the stash to a list or a file
         """
         all_keys = []
@@ -247,7 +250,7 @@ class Stash(object):
             # We `dict` this as a precaution as tinydb returns
             # a tinydb.database.Element instead of a dictionary
             # and well.. I ain't taking no chances
-            all_keys.append(dict(self.get(key, decrypt=False)))
+            all_keys.append(dict(self.get(key, decrypt=decrypt)))
         if all_keys:
             if output_path:
                 with open(output_path, 'w') as output_file:
@@ -256,7 +259,7 @@ class Stash(object):
         else:
             raise GhostError('There are no keys to export')
 
-    def load(self, keys=None, key_file=None):
+    def load(self, keys=None, key_file=None, encrypt=False):
         """Import keys to the stash from either a list of keys or a file
 
         `keys` is a list of dictionaries created by `self.export`
@@ -272,7 +275,34 @@ class Stash(object):
                 keys = json.loads(stash_file.read())
 
         for key in keys:
-            self._storage.put(key)
+            self.put(
+                name=key['name'],
+                value=key['value'],
+                metadata=key['metadata'],
+                description=key['description'],
+                encrypt=encrypt)
+        # eh?
+        return self.list()
+
+
+def migrate(src_path,
+            src_passphrase,
+            src_backend,
+            dst_path,
+            dst_passphrase,
+            dst_backend):
+    """Migrate all keys in a source stash to a destination stash
+
+    The migration process will decrypt all keys using the source
+    stash's passphrase and then encrypt them based on the destination
+    stash's passphrase.
+    """
+    src_storage = STORAGE_MAPPING[src_backend](db_path=src_path)
+    dst_storage = STORAGE_MAPPING[dst_backend](db_path=dst_path)
+    src_stash = Stash(src_storage, src_passphrase)
+    dst_stash = Stash(dst_storage, dst_passphrase)
+    keys = src_stash.export(decrypt=True)
+    dst_stash.load(keys=keys, encrypt=True)
 
 
 class TinyDBStorage(object):
@@ -530,7 +560,7 @@ def generate_passphrase(size=12):
     and digit chars
     """
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(size))
+    return str(''.join(random.choice(chars) for _ in range(size)))
 
 
 class GhostError(Exception):
@@ -599,7 +629,7 @@ CLICK_CONTEXT_SETTINGS = dict(
 
 # Currently static. We'll see how backend implementations go and adjust
 # to dynamic mapping accordingly
-STORAGE_NAME_MAPPING = {
+STORAGE_MAPPING = {
     'tinydb': TinyDBStorage,
     'sqlalchemy': SQLAlchemyStorage,
     'consul': ConsulStorage,
@@ -634,28 +664,26 @@ backend_option = click.option(
     '--backend',
     envvar='GHOST_BACKEND',
     default='tinydb',
-    type=click.Choice(STORAGE_NAME_MAPPING.keys()),
-    help='Storage backend for the stash [{0}] (Can be set via the '
+    type=click.Choice(STORAGE_MAPPING.keys()),
+    help='Storage backend for the stash (Can be set via the '
     '`GHOST_BACKEND_TYPE` env var)'.format(
-        STORAGE_NAME_MAPPING.keys()))
+        STORAGE_MAPPING.keys()))
 
 
 @main.command(name='init', short_help='Init a stash')
-@click.argument('STASH_PATH',
-                required=False)
+@click.argument('STASH_PATH', required=False)
 @click.option('-p',
               '--passphrase',
               default=None,
               type=click.STRING,
-              help='Path to the stash')
-@click.option('--passphrase-size',
-              default=12)
+              help='Stash Passphrase')
+@click.option('--passphrase-size', default=12)
 @click.option('-b',
               '--backend',
               default='tinydb',
-              type=click.Choice(STORAGE_NAME_MAPPING.keys()),
-              help='Storage backend for the stash [{0}]'.format(
-                  STORAGE_NAME_MAPPING.keys()))
+              type=click.Choice(STORAGE_MAPPING.keys()),
+              help='Storage backend for the stash'.format(
+                  STORAGE_MAPPING.keys()))
 def init_stash(stash_path, passphrase, passphrase_size, backend):
     r"""Init a stash
 
@@ -666,12 +694,13 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     variables for both your stash's path and its passphrase.
     On Linux/OSx you can run:
 
-    export GHOST_STASH_PATH='MY_PATH' \n
+    export GHOST_STASH_PATH='MY_PATH'
+
     export GHOST_PASSPHRASE=$(cat passphrase.ghost)
     """
     click.echo('Initializing stash...')
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     passphrase_file_name = 'passphrase.ghost'
     try:
@@ -723,7 +752,7 @@ def put_key(key_name,
     """
     click.echo('Stashing key...')
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
@@ -758,7 +787,7 @@ def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
     if not jsonify:
         click.echo('Retrieving key...')
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key_name=key_name, decrypt=not no_decrypt)
     if not record:
@@ -781,7 +810,7 @@ def delete_key(key_name, stash, passphrase, backend):
     """
     click.echo('Deleting key...')
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.delete(key_name=key_name)
@@ -804,7 +833,7 @@ def list_keys(jsonify, stash, passphrase, backend):
     if not jsonify:
         click.echo('Listing all keys in {0}...'.format(stash))
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
     if not keys:
@@ -829,7 +858,7 @@ def purge_stash(force, stash, passphrase, backend):
     """
     click.echo('Purging stash {0}...'.format(stash))
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.purge(force)
@@ -852,7 +881,7 @@ def export_keys(output_path, stash, passphrase, backend):
     """
     click.echo('Exporting stash {0} to {1}...'.format(stash, output_path))
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.export(output_path=output_path)
@@ -870,8 +899,57 @@ def load_keys(key_file, stash, passphrase, backend):
 
     `KEY_FILE` is the exported stash file to load keys from
     """
-    click.echo('Import all keys from {0} to {1}...'.format(key_file, stash))
+    click.echo('Importing all keys from {0} to {1}...'.format(key_file, stash))
     stash = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    storage = STORAGE_NAME_MAPPING[backend](db_path=stash)
+    storage = STORAGE_MAPPING[backend](db_path=stash)
     stash = Stash(storage, passphrase=passphrase)
     stash.load(key_file=key_file)
+
+
+@main.command(name='migrate')
+@click.argument('SOURCE_STASH_PATH')
+@click.argument('DESTINATION_STASH_PATH')
+@click.option('-sp',
+              '--source-passphrase',
+              default=None,
+              type=click.STRING,
+              help='Path to the source stash')
+@click.option('-sb',
+              '--source-backend',
+              type=click.Choice(STORAGE_MAPPING.keys()),
+              help='Storage backend for the stash'.format(
+                  STORAGE_MAPPING.keys()))
+@click.option('-dp',
+              '--destination-passphrase',
+              default=None,
+              type=click.STRING,
+              help='Path to the destination stash')
+@click.option('-db',
+              '--destination-backend',
+              type=click.Choice(STORAGE_MAPPING.keys()),
+              help='Storage backend for the stash'.format(
+                  STORAGE_MAPPING.keys()))
+def migrate_stash(source_stash_path,
+                  source_passphrase,
+                  source_backend,
+                  destination_stash_path,
+                  destination_passphrase,
+                  destination_backend):
+    """Migrate all keys from a source stash to a destination stash.
+
+    `SOURCE_STASH_PATH` and `DESTINATION_STASH_PATH` are the paths
+    to the stashs you wish to perform the migration on.
+    """
+    click.echo('Migrating all keys from {0} to {1}...'.format(
+        source_stash_path, destination_stash_path))
+    try:
+        migrate(
+            src_path=source_stash_path,
+            src_passphrase=source_passphrase,
+            src_backend=source_backend,
+            dst_path=destination_stash_path,
+            dst_passphrase=destination_passphrase,
+            dst_backend=destination_backend)
+    except GhostError as ex:
+        sys.exit(ex)
+    click.echo('Migration complete!')
