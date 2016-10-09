@@ -16,8 +16,6 @@
 # TODO: Add ghost backend which exports and loads stuff
 # TODO: Document how to export a key to a file using bash redirection
 
-from __future__ import unicode_literals
-
 import os
 import sys
 import json
