@@ -538,13 +538,6 @@ class TestStash:
     def test_generated_passphrase(self, test_stash):
         assert_stash_initialized(test_stash._storage.db_path)
 
-    def test_init_passphrase_not_string(self, stash_path):
-        storage = ghost.TinyDBStorage(stash_path)
-        stash = ghost.Stash(storage, ['x'])
-        with pytest.raises(ghost.GhostError) as ex:
-            stash.init()
-        assert 'passphrase must be a non-empty string' in str(ex.value)
-
     def test_put(self, test_stash):
         id = test_stash.put('aws', {'key': 'value'})
         db = get_tinydb(test_stash._storage.db_path)
@@ -676,7 +669,7 @@ class TestStash:
         keys = test_stash.export()
         assert keys[0]['name'] == 'aws'
         test_stash.purge(force=True)
-        test_stash.load(keys)
+        test_stash.load(keys, encrypt=False)
         key_list = test_stash.list()
         assert len(key_list) == 1
         assert 'aws' in key_list
@@ -697,6 +690,42 @@ class TestStash:
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.load()
         assert 'You must either provide a path to an exported' in str(ex.value)
+
+    def test_migrate(self, test_stash, temp_file_path):
+        """Test migration between a tinydb and sqlite stashes
+
+        We setup a stash with two keys, setup an empty destination stash
+        and then migrate from one to the other.
+        """
+        migration_params, destination_stash = _create_migration_env(
+            test_stash, temp_file_path)
+        ghost.migrate(**migration_params)
+        assert len(destination_stash.list()) == 3
+        assert 'aws' in destination_stash.list()
+        assert 'gcp' in destination_stash.list()
+        assert 'openstack' in destination_stash.list()
+
+
+def _create_migration_env(test_stash, temp_file_path):
+        test_stash.put('aws', {'a': 'b'})
+        test_stash.put('gcp', {'c': 'd'})
+
+        source_passphrase = test_stash.passphrase
+        test_sqlite_path = 'sqlite:///{0}'.format(temp_file_path)
+        destination_storage = ghost.SQLAlchemyStorage(test_sqlite_path)
+        destination_stash = ghost.Stash(destination_storage)
+        destination_passphrase = destination_stash.init()
+        destination_stash.put('openstack', {'e': 'f'})
+        assert len(destination_stash.list()) == 1
+        assert 'openstack' in destination_stash.list()
+        migration_params = dict(
+            src_path=test_stash._storage.db_path,
+            src_passphrase=source_passphrase,
+            src_backend='tinydb',
+            dst_path=test_sqlite_path,
+            dst_passphrase=destination_passphrase,
+            dst_backend='sqlalchemy')
+        return migration_params, destination_stash
 
 
 @pytest.fixture
@@ -840,3 +869,32 @@ class TestCLI:
         _invoke('load_keys {0}'.format(temp_file_path))
         result = _invoke('list_keys -j')
         assert json.loads(result.output) == key_list
+
+    def test_migrate(self, test_stash, temp_file_path):
+        migration_params, destination_stash = _create_migration_env(
+            test_stash, temp_file_path)
+        _invoke(
+            'migrate_stash {src_path} {dst_path} '
+            '-sp {src_passphrase} -dp {dst_passphrase} '
+            '-sb {src_backend} -db {dst_backend}'.format(**migration_params))
+        assert len(destination_stash.list()) == 3
+        assert 'aws' in destination_stash.list()
+        assert 'gcp' in destination_stash.list()
+        assert 'openstack' in destination_stash.list()
+
+    def test_fail_migrate(self, test_stash, temp_file_path):
+        migration_params, destination_stash = _create_migration_env(
+            test_stash, temp_file_path)
+        fd, invalid_stash = tempfile.mkstemp()
+        os.close(fd)
+        try:
+            result = _invoke(
+                'migrate_stash {0} {dst_path} '
+                '-sp {src_passphrase} -dp {dst_passphrase} '
+                '-sb {src_backend} -db {dst_backend}'.format(
+                    invalid_stash, **migration_params))
+        finally:
+            os.remove(invalid_stash)
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'There are no keys to export' in result.output
