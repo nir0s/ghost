@@ -328,21 +328,55 @@ class TinyDBStorage(object):
                 self.db_path))
 
     def put(self, key):
-        """
-        `key` is the dictionary representing the key
+        """Insert the key and return its database id
         """
         return self.db.insert(key)
 
     def list(self):
+        """Return a list of all keys (not just key names, but rather the keys
+        themselves).
+
+        e.g.
+         {u'created_at': u'2016-10-10 08:31:53',
+          u'description': None,
+          u'metadata': None,
+          u'modified_at': u'2016-10-10 08:31:53',
+          u'name': u'aws',
+          u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
+          u'value': u'the_value'},
+         {u'created_at': u'2016-10-10 08:32:29',
+          u'description': u'my gcp token',
+          u'metadata': {u'owner': u'nir'},
+          u'modified_at': u'2016-10-10 08:32:29',
+          u'name': u'gcp',
+          u'uid': u'a51a0043-f241-4d52-93c1-266a3c5de15e',
+          u'value': u'the_value'}]
+
+        """
+        # TODO: Return only the key names from all storages
         return self.db.search(Query().name.matches('.*'))
 
     def get(self, key_name):
+        """Return a dictionary consisting of the key itself
+
+        e.g.
+        {u'created_at': u'2016-10-10 08:31:53',
+         u'description': None,
+         u'metadata': None,
+         u'modified_at': u'2016-10-10 08:31:53',
+         u'name': u'aws',
+         u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
+         u'value': u'the_value'}
+
+        """
         result = self.db.search(Query().name == key_name)
         if not result:
             return {}
         return result[0]
 
     def delete(self, key_name):
+        """Delete the key and return true if the key was deleted, else false
+        """
         return self.db.remove(Query().name == key_name)
 
 
