@@ -149,7 +149,7 @@ The stash is empty. Go on, put some keys in there...
 
 NOTE: `--passphrase` and `--stash` can be supplied via the `GHOST_STASH_PATH` and `GHOST_PASSPHRASE` env vars.
 
-NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlchemy backend, you must either provide the `--stash` and `--backend` flags with every command or set the `--GHOST_STASH_PATH` and `--GHOST_BACKEND` env vars after having initialized the stash. Not providing the stash path and the backend will make ghost fail misrebly.
+NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlchemy backend, you must either provide the `--stash` and `--backend` flags with every command or set the `GHOST_STASH_PATH` and `GHOST_BACKEND` env vars after having initialized the stash. Not providing the stash path and the backend will result in ghost failing misrebly.
 
 ### Directly from Python
 
@@ -178,14 +178,39 @@ stash.delete('aws')
 
 ## Backends
 
-The supported backends are:
-
-* [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
-* [SQLAlchemy](http://www.sqlalchemy.org) (Tested on v1.0.15) (Note that the SQLAlchemyStorage supports any SQLAlchemy connection string. The default one is sqlite)
-* [Consul](http://www.consul.io)
-* [Vault](http://www.vaultproject.io)
-
 NOTE: ghost includes dependencies required for TinyDB only. `optional-requirements.txt` contain dependencies for other backends.
+
+NOTE: Whlie true for the API, the CLI does not currently expose any advanced configuration for the Vault and Consul backends such as setting certs, credentials or paths.
+
+Until the API documentation is complete, please take a look at the Storage API's on host to use each storage.
+
+### [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
+
+The TinyDB backend provides an easy to read, portable JSON file based stash. It is the default backend when using the CLI as it is the simplest to digest for new users.
+
+### [SQLAlchemy](http://www.sqlalchemy.org)
+
+(Tested on v1.0.15)
+
+The SQLAlchemy backend provides a way to use all well known SQL databases as backends including a local sqlite file. Functionally, the sqlite backend resembles the TinyDB backend, but is not humanly readable.
+
+All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the likes are easily accessible as long as you provide the correct connection string.
+
+### [Consul](http://www.consul.io)
+
+(Tested on v0.7.0)
+
+The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but that is of course not recommended to prevent dataloss.
+
+### [Vault](http://www.vaultproject.io)
+
+(Tested on v0.6.1)
+
+NOTE: You MUST provide your Vault token either via the API or via the `VAULT_TOKEN` env var to use the Vault backend.
+
+Controversially, you may use Vault as your stash. Since Vault itself encrypts and decrypts keys and requires a token, it would seem weird to use ghost as a front-end for it. I do not recommend using the ghost with Vault unless you need to do cross-backend work - that is, using multiple backends at once or preserving a single API where Vault isn't always accessible. The main reason for using ghost and not Vault is its no-server nature. If you already have Vault running, you may as well use its CLI/API and not use ghost to overcome unnecessary abstraction layers.
+
+As such, much like with Consul, note that ghost does not provide any complicated configuration options for Vault using the CLI or otherwise. You need to have your Vault[Cluster] preconfigured after-which ghost will store all keys under the `secrets` path (can be overriden). You may provide a key named `aws/account_1`, for instance, in which case ghost will just pass the path along to Vault.
 
 
 ## Encryption & Decryption
@@ -194,7 +219,7 @@ Encryption is done using [cryptography](https://cryptography.io/en/latest/). It 
 
 Values are encrypted once provided and decrypted only upon request, meaning that they're only available in memory for a very short period of time.
 
-See [cryptography](https://cryptography.io/en/latest/)'s documentation for additional information.
+See cryptography's [documentation](https://cryptography.io/en/latest/) for additional information.
 
 
 ## Exporting and Importing
@@ -205,7 +230,13 @@ The `export` command allows you to generate a json file containing all keys (enc
 
 So, for instance, if you have a local implementation using sqlite, you could export all keys; create a new stash using the SQLAlchemy storage for postgre and load all keys into that storage for your server's implementation.
 
-This also enables you to create a backup flow for your keys.
+The `migrate` command will allow you to easily migrate all of your keys from one backend to another like so:
+
+```bash
+ghost migrate my_stash.json postgresql://localhost/ghost --source-passphrase 123 --destination-passphrase 321 --source-backend tinydb --destination-backend sqlalchemy
+```
+
+Note that using the `migrate` command (or API) will result in keys being decrypted and reencrypted on the destination stash.
 
 
 ## Secret key delegation
@@ -237,11 +268,5 @@ tox
 ## Contributions..
 
 You can add additional backends by implementing a single class which implements the `init`, `put`, `get`, `delete` and `list` methods. Both the TinyDB and SQLAlchemy implementations are extremely lightweight and can be used as reference implementations.
-
-* `init` should do whatever is required to initialize the database in which the keys will be held.
-* `put` should insert a key dict into the database and return its id.
-* `get` should return the key dict
-* `delete` should delete the key and return a boolean representing whether it was deleted or not.
-* `list` should return a list of all keys. 
 
 Pull requests are always welcome..
