@@ -730,14 +730,17 @@ def _create_migration_env(test_stash, temp_file_path):
 
 @pytest.fixture
 def test_cli_stash(stash_path):
+    fd, passphrase_file_path = tempfile.mkstemp()
+    os.close(fd)
+    ghost.PASSPHRASE_FILENAME = passphrase_file_path
     _invoke('init_stash {0}'.format(stash_path))
     os.environ['GHOST_STASH_PATH'] = stash_path
-    with open('passphrase.ghost') as passphrase_file:
+    with open(passphrase_file_path) as passphrase_file:
         passphrase = passphrase_file.read()
     os.environ['GHOST_PASSPHRASE'] = passphrase
     os.environ['GHOST_BACKEND_TYPE'] = 'tinydb'
     yield ghost.Stash(ghost.TinyDBStorage(stash_path), passphrase)
-    os.remove('passphrase.ghost')
+    os.remove(passphrase_file_path)
     os.remove(stash_path)
 
 

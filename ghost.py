@@ -75,6 +75,8 @@ STORAGE_DEFAULT_PATH_MAPPING = {
     'vault': 'http://127.0.0.1:8200'
 }
 
+PASSPHRASE_FILENAME = 'passphrase.ghost'
+
 
 class Stash(object):
     def __init__(self, storage, passphrase=None, passphrase_size=12):
@@ -517,12 +519,11 @@ class VaultStorage(object):
 
     def list(self):
         keys = self.client.list(self.path)
-        keys = keys['data']['keys']
         if not keys:
             return []
+        keys = keys['data']['keys']
         key_list = []
         for key_name in keys:
-            # raise Exception(self.get(key_name))
             key_list.append(self.get(key_name))
         return key_list
 
@@ -700,17 +701,16 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
-    passphrase_file_name = 'passphrase.ghost'
     try:
         passphrase = stash.init()
-        with open(passphrase_file_name, 'w') as passphrase_file:
+        with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
             passphrase_file.write(passphrase)
     except GhostError as ex:
         sys.exit(ex)
     click.echo('Initalized stash at: {0}'.format(stash_path))
     click.echo(
         'Your passphrase can be found under the `{0}` file in the '
-        'current directory'.format(passphrase_file_name))
+        'current directory'.format(PASSPHRASE_FILENAME))
     click.echo(
         'Make sure you save your passphrase somewhere safe. '
         'If lost, you will lose access to your stash.')
