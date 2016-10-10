@@ -150,11 +150,45 @@ class TestTinyDBStorage:
     def test_init_stash_already_exists(self):
         fd, stash_path = tempfile.mkstemp()
         os.close(fd)
-        storage = ghost.TinyDBStorage(stash_path)
-        with pytest.raises(ghost.GhostError) as ex:
+        try:
+            storage = ghost.TinyDBStorage(stash_path)
+            with pytest.raises(ghost.GhostError) as ex:
+                storage.init()
+            assert 'Stash {0} already initialized'.format(stash_path) \
+                in str(ex.value)
+        finally:
+            os.remove(stash_path)
+
+    def test_init_stash_create_directory(self):
+        stash_dir = tempfile.mkdtemp()
+        shutil.rmtree(stash_dir)
+        stash_path = os.path.join(stash_dir, 'stash.json')
+        try:
+            storage = ghost.TinyDBStorage(stash_path)
+            assert os.path.isdir(stash_dir) is False
             storage.init()
-        assert 'Stash {0} already initialized'.format(stash_path) \
-            in str(ex.value)
+            assert os.path.isdir(stash_dir) is True
+        finally:
+            shutil.rmtree(stash_dir)
+
+    def test_init_stash_in_current_dir(self):
+        """Test this because it depends on the ability
+        of the storage to understand whether it should or should not create
+        a directory.
+        """
+        prev_dir = os.getcwd()
+        stash_dir = tempfile.mkdtemp()
+        os.chdir(stash_dir)
+        stash_path = os.path.join(stash_dir, 'stash.json')
+        try:
+            storage = ghost.TinyDBStorage(stash_path)
+            stash = ghost.Stash(storage)
+            assert os.path.isfile(stash_path) is False
+            stash.init()
+            assert os.path.isfile(stash_path) is True
+        finally:
+            os.chdir(prev_dir)
+            shutil.rmtree(stash_dir)
 
     def test_put(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
@@ -228,6 +262,37 @@ class TestSQLAlchemyStorage:
         assert 'Stash {0} already initialized'.format(stash_path) \
             in str(ex.value)
         os.remove(stash_path)
+
+    def test_init_stash_create_directory(self):
+        stash_dir = tempfile.mkdtemp()
+        shutil.rmtree(stash_dir)
+        stash_path = 'sqlite:///' + os.path.join(stash_dir, 'stash.json')
+        try:
+            storage = ghost.SQLAlchemyStorage(stash_path)
+            assert os.path.isdir(stash_dir) is False
+            storage.init()
+            assert os.path.isdir(stash_dir) is True
+        finally:
+            shutil.rmtree(stash_dir)
+
+    def test_init_stash_in_current_dir(self):
+        """Test this because it depends on the ability
+        of the storage to understand whether it should or should not create
+        a directory.
+        """
+        prev_dir = os.getcwd()
+        stash_dir = tempfile.mkdtemp()
+        os.chdir(stash_dir)
+        stash_path = os.path.join(stash_dir, 'stash.json')
+        try:
+            storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+            stash = ghost.Stash(storage)
+            assert os.path.isfile(stash_path) is False
+            stash.init()
+            assert os.path.isfile(stash_path) is True
+        finally:
+            os.chdir(prev_dir)
+            shutil.rmtree(stash_dir)
 
     def test_put(self, stash_path):
         storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
