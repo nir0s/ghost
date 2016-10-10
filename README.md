@@ -196,6 +196,12 @@ The SQLAlchemy backend provides a way to use all well known SQL databases as bac
 
 All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the likes are easily accessible as long as you provide the correct connection string.
 
+### [Elasticsearch](http://elastic.co)
+
+(Tested on v2.4.1 using elasticsearch-py 2.4.0)
+
+The Elasticsearch resembles the TinyDB backend in that it simply stores JSON documents. An Index called `ghost` is created in the cluster (unless another index name is provided via the API) and used to store the keys.
+
 ### [Consul](http://www.consul.io)
 
 (Tested on v0.7.0)

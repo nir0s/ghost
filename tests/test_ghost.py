@@ -21,13 +21,15 @@ import shutil
 import tempfile
 
 import mock
-import hvac  # NOQA
 import pytest
 import click.testing as clicktest
 
+import hvac  # NOQA
+import elasticsearch  # NOQA
 from sqlalchemy import sql
 from sqlalchemy import inspect
 from sqlalchemy import create_engine
+
 
 import ghost
 
@@ -487,7 +489,7 @@ class HvacClient(object):
             'data': {
                 'keys': self.store.keys()
             }
-        }
+        } if self.store.keys() else None
 
     def read(self, path):
         """
@@ -562,6 +564,135 @@ class TestVaultStorage:
             'metadata': {'vault_metadata': 'x'}
         }
         storage.put({'name': 'aws', 'value': {'x': 'y'}})
+        key_list = storage.list()
+        assert len(key_list) == 1
+        assert key_list[0] == expected_key
+
+
+class ESIndices(object):
+    def create(self, index, ignore):
+        """
+        {
+            u'status': 400,
+            u'error': {
+                u'index': u'ghost',
+                u'root_cause': [
+                    {
+                        u'index': u'ghost',
+                        u'reason': u'already exists',
+                        u'type': u'index_already_exists_exception'
+                    }
+                ],
+                u'type': u'index_already_exists_exception',
+                u'reason': u'already exists'
+            }
+        }
+        """
+        return {}
+
+
+class ElasticsearchClient(object):
+
+    def __init__(self,
+                 db_path='x',
+                 index='ghost',
+                 use_ssl=False,
+                 verify_certs=False,
+                 ca_certs='',
+                 client_cert='',
+                 client_key=''):
+        self.store = {}
+        self.indices = ESIndices()
+
+    def search(self, body, filter_path, **kwargs):
+        """
+         {
+            u'hits': {
+                u'hits': [
+                    {
+                        u'_id': u'AVewADAWUnUKEMeMQ4QB',
+                        u'_source': {
+                            u'description': None,
+                            u'created_at':
+                            u'2016-10-10 22:09:44',
+                            u'modified_at':
+                            u'2016-10-10 22:09:44',
+                            u'value': u'the_value',
+                            u'name': u'aws',
+                            u'uid': u'7a1caa7d-14d4-4045-842c-66adf22190b5',
+                            u'metadata': None
+                        }
+                    },
+                ]
+            }
+        }
+        """
+        if 'match_all' in body['query']:
+            items = list(self.store.items())
+            for name, key in items:
+                return self.store[name]
+            else:
+                return {'hits': {'hits': []}}
+        else:
+            return self.store.get(body['query']['match']['name'])
+
+    def index(self, body, **kwargs):
+        key = {'hits': {'hits': [{'_source': body, '_id': 'mock_id'}]}}
+        self.store[body['name']] = key
+        return key['hits']['hits'][0]
+
+    def delete(self, id, refresh, **kwargs):
+        items = list(self.store.items())
+        for name, key in items:
+            if key['hits']['hits'][0]['_id'] == id:
+                del self.store[name]
+
+
+class TestElasticsearchStorage:
+    def test_no_elasticsearch(self):
+        with mock.patch('ghost.ES_EXISTS', False):
+            with pytest.raises(ImportError):
+                ghost.ElasticsearchStorage()
+
+    @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
+    def test_init(self):
+        storage = ghost.ElasticsearchStorage()
+        # Just means that init has been called.
+        # We assume that that create function in the es API actually works.
+        assert storage.init() == {}
+
+    @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
+    def test_put_get_delete(self):
+        storage = ghost.ElasticsearchStorage()
+        storage.put({'name': 'aws', 'value': {'x': 'y'}, 'metadata': {}})
+        expected_key = {
+            'name': 'aws',
+            'value': {'x': 'y'},
+            'metadata': {}
+        }
+        assert expected_key == storage.get('aws')
+        storage.delete('aws')
+        assert storage.get('aws') == {}
+
+    @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
+    def test_delete_non_existing_key(self):
+        storage = ghost.ElasticsearchStorage()
+        assert storage.delete('aws') is True
+
+    @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
+    def test_empty_list(self):
+        storage = ghost.ElasticsearchStorage()
+        assert storage.list() == []
+
+    @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
+    def test_list(self):
+        storage = ghost.ElasticsearchStorage()
+        expected_key = {
+            'name': 'aws',
+            'value': {'x': 'y'},
+            'metadata': {}
+        }
+        storage.put({'name': 'aws', 'value': {'x': 'y'}, 'metadata': {}})
         key_list = storage.list()
         assert len(key_list) == 1
         assert key_list[0] == expected_key
@@ -645,6 +776,10 @@ class TestStash:
         assert key['value'] == {'modified_key': 'modified_value'}
         assert key['created_at'] == created_at
         assert key['modified_at'] != modified_at
+        test_stash.put('aws', description='modified', modify=True)
+        key = test_stash.get('aws')
+        assert key['value'] == {'modified_key': 'modified_value'}
+        assert key['description'] == 'modified'
 
     def test_put_modify_nonexisting_key(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
@@ -658,15 +793,20 @@ class TestStash:
         assert "Use the modify flag to overwrite" in str(ex.value)
 
     def test_get(self, test_stash):
+        def _test_key(key):
+            assert isinstance(key, dict)
+            assert 'name' in key
+            assert 'value' in key
+            assert 'description' in key
+            assert 'modified_at' in key
+            assert 'created_at' in key
+            assert 'uid' in key
         test_stash.put('aws', {'key': 'value'})
         key = test_stash.get('aws')
-        assert isinstance(key, dict)
-        assert 'name' in key
-        assert 'value' in key
-        assert 'description' in key
-        assert 'modified_at' in key
-        assert 'created_at' in key
-        assert 'uid' in key
+        _test_key(key)
+        # Get again, just to verify
+        key = test_stash.get('aws')
+        _test_key(key)
 
     def test_get_nonexisting_key(self, test_stash):
         key = test_stash.get('aws')
