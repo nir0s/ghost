@@ -66,13 +66,20 @@ try:
 except ImportError:
     HVAC_EXISTS = False
 
+try:
+    import elasticsearch
+    ES_EXISTS = True
+except ImportError:
+    ES_EXISTS = False
+
 
 GHOST_HOME = user_data_dir('ghost')
 STORAGE_DEFAULT_PATH_MAPPING = {
     'tinydb': os.path.join(GHOST_HOME, 'stash.json'),
     'sqlalchemy': 'sqlite:///{0}/stash.sql'.format(GHOST_HOME),
     'consul': 'http://127.0.0.1:8500',
-    'vault': 'http://127.0.0.1:8200'
+    'vault': 'http://127.0.0.1:8200',
+    'elasticsearch': 'http://127.0.0.1:9200'
 }
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
@@ -211,7 +218,7 @@ class Stash(object):
     def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
         """
-        key = self._storage.get(key_name)
+        key = self._storage.get(key_name).copy()
         if not key.get('value'):
             return None
         if decrypt:
@@ -549,6 +556,7 @@ class VaultStorage(object):
         """
 
     def put(self, key):
+        # TODO: Check if vault has a uid of a secret to return
         self.client.write(self._key_path(key['name']), **key)
 
     def list(self):
@@ -577,6 +585,78 @@ class VaultStorage(object):
 
     def delete(self, key_name):
         self.client.delete(self._key_path(key_name))
+        return self.get(key_name) == {}
+
+
+class ElasticsearchStorage(object):
+    def __init__(self,
+                 db_path=STORAGE_DEFAULT_PATH_MAPPING['elasticsearch'],
+                 index='ghost',
+                 use_ssl=False,
+                 verify_certs=False,
+                 ca_certs='',
+                 client_cert='',
+                 client_key=''):
+        if not ES_EXISTS:
+            raise ImportError('elasticsearch-py must be installed first')
+        # TODO: Allow multiple hosts
+        self.es = elasticsearch.Elasticsearch(
+            [db_path],
+            use_ssl=use_ssl,
+            verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key)
+        self.params = dict(index=index, doc_type='doc')
+
+    def init(self):
+        """Create an Elasticsearch index if necessary
+        """
+        # ignore 400 (IndexAlreadyExistsException) when creating an index
+        return self.es.indices.create(index=self.params['index'], ignore=400)
+
+    def put(self, key):
+        document = self.es.index(body=key, **self.params)
+        return document['_id']
+
+    def list(self):
+        query = {"query": {"match_all": {}}}
+        result = self.es.search(
+            body=query,
+            filter_path=['hits.hits._source', 'hits.hits._id'],
+            **self.params)
+        key_list = []
+        for key in result['hits']['hits']:
+            key_list.append(key['_source'])
+        return key_list
+
+    def _get_document(self, key_name):
+        query = {"query": {"match": {"name": key_name}}}
+        result = self.es.search(
+            body=query,
+            filter_path=['hits.hits._source', 'hits.hits._id'],
+            **self.params)
+        return result['hits']['hits'] if result else {}
+
+    def get(self, key_name):
+        document_list = self._get_document(key_name)
+        if not document_list:
+            return {}
+        return document_list[0]['_source']
+
+    def delete(self, key_name):
+        document_list = self._get_document(key_name)
+        if not document_list:
+            return True
+        # `wait_for` a refresh to make this available for search
+        self.es.delete(
+            id=document_list[0]['_id'],
+            refresh='wait_for',
+            **self.params)
+        # The response returned by es.delete actually contains
+        # the success status of the request. We're not taking
+        # any chances here but rather verifying that you can't
+        # get that key anymore.
         return self.get(key_name) == {}
 
 
@@ -666,7 +746,8 @@ STORAGE_MAPPING = {
     'tinydb': TinyDBStorage,
     'sqlalchemy': SQLAlchemyStorage,
     'consul': ConsulStorage,
-    'vault': VaultStorage
+    'vault': VaultStorage,
+    'elasticsearch': ElasticsearchStorage
 }
 
 
