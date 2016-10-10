@@ -281,8 +281,6 @@ class Stash(object):
                 metadata=key['metadata'],
                 description=key['description'],
                 encrypt=encrypt)
-        # eh?
-        return self.list()
 
 
 def migrate(src_path,
@@ -321,7 +319,8 @@ class TinyDBStorage(object):
         return self._db
 
     def init(self):
-        if not os.path.isdir(os.path.dirname(self.db_path)):
+        dirname = os.path.dirname(self.db_path)
+        if dirname and not os.path.isdir(dirname):
             os.makedirs(os.path.dirname(self.db_path))
         elif os.path.isfile(self.db_path):
             raise GhostError('Stash {0} already initialized'.format(
@@ -409,7 +408,8 @@ class SQLAlchemyStorage(object):
     def init(self):
         if 'sqlite://' in self.db_path:
             path = os.path.expanduser(self.db_path).split('://')[1]
-            if not os.path.isdir(os.path.dirname(path)):
+            dirname = os.path.dirname(path)
+            if dirname and not os.path.isdir(dirname):
                 os.makedirs(os.path.dirname(path))
             elif os.path.isfile(path):
                 raise GhostError('Stash {0} already initialized'.format(
