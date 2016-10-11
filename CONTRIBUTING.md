@@ -4,7 +4,7 @@
 
 Contributing a new backend to ghost requires implementing a single class comprising, at the very least the class's constructor (`__init__`) and the `init`, `put`, `list`, `get` and `delete` base methods.
 
-Each backend's base method should return the same data.
+Each corresponding backend base method should return the same data structure.
 
 
 ### Backend dependencies
@@ -21,11 +21,13 @@ extras_require={
 
 You can then conditionally import them like so:
 
+```python
 try:
     import mystorage
     MYSTORAGE_EXISTS = True
 except ImportError:
     MYSTORAGE_EXISTS = False
+```
 
 ### Constructor
 
@@ -137,7 +139,7 @@ def delete(self, key_name):
 
 ### Adding the backend to the CLI and setting its default path
 
-For your backend, you should add the default path to the global STORAGE_DEFAULT_PATH_MAPPING:
+For your backend, you should add the default path to the global `STORAGE_DEFAULT_PATH_MAPPING`:
 
 ```python
 {
@@ -147,7 +149,7 @@ For your backend, you should add the default path to the global STORAGE_DEFAULT_
 }
 ```
 
-For it to be available to the CLI, you should add a mapping to the global STORAGE_MAPPING:
+For it to be available to the CLI, you should add a mapping to the global `STORAGE_MAPPING`:
 
 ```python
 {
@@ -159,4 +161,4 @@ For it to be available to the CLI, you should add a mapping to the global STORAG
 
 ### Coverage
 
-Coverage is expected to be a 100% for every storage. The only part not required is the `import` part.
+Coverage is expected to be a 100% for every backend. The only part not required is the conditional `import` part for its dependencies.

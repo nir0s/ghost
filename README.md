@@ -223,7 +223,7 @@ To enable, run `pip install ghost[vault]`
 
 NOTE: You MUST provide your Vault token either via the API or via the `VAULT_TOKEN` env var to use the Vault backend.
 
-Controversially, you may use Vault as your stash. Since Vault itself encrypts and decrypts keys and requires a token, it would seem weird to use ghost as a front-end for it. I do not recommend using the ghost with Vault unless you need to do cross-backend work - that is, using multiple backends at once or preserving a single API where Vault isn't always accessible. The main reason for using ghost and not Vault is its no-server nature. If you already have Vault running, you may as well use its CLI/API and not use ghost to overcome unnecessary abstraction layers.
+Controversially, you may use Vault as your stash. Since Vault itself encrypts and decrypts keys and requires a token, it would seem weird to use ghost as a front-end for it. I do not recommend using ghost with Vault unless you need to do cross-backend work - that is, use multiple backends at once or preserve a single API where Vault isn't always accessible. The main reason for using ghost and not Vault is mainly its no-server nature. If you already have Vault running, you may as well use its CLI/API and not use ghost to overcome unnecessary abstraction layers.
 
 As such, much like with Consul, note that ghost does not provide any complicated configuration options for Vault using the CLI or otherwise. You need to have your Vault[Cluster] preconfigured after-which ghost will store all keys under the `secrets` path (can be overriden). You may provide a key named `aws/account_1`, for instance, in which case ghost will just pass the path along to Vault.
 
