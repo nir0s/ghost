@@ -1,3 +1,16 @@
+**0.4.0 (2016-10-11)
+* Add a Vault backend
+* Add an Elasticsearch backend
+* Add a Consul backend (Thanks tehasdf!)
+* Add `migrate` command and API which performs a comfortable `export` and `load` from one stash to another.
+* Add contribution docs, backend specific docs and more elaborate docs in general.
+* Add `extras_require` for the different backends so that you can now run `pip install ghost[backend_name]` to install the backend's dependencies.
+* Verify Windows support. Ghost currently supports Windows, there are some tests to fix though.
+* Provide a default stash path in the CLI for each backend type.
+* Use appdirs to provide the default dir for ghost's home (Thanks jcollado!)
+* Fix not being able to `stash.get(key)` twice using the API.
+* Fix not being able to create a stash in the `cwd` when using a file based backend like TinyDB or SQLite
+
 **0.3.0 (2016-09-25)**
 
 * Generated passphrase will now be printed to a file (`cwd/passphrase.ghost`) instead of to the screen.
