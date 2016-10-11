@@ -28,6 +28,12 @@ setup(
         "appdirs==1.4.0",
         "cryptography>=1.5"
     ],
+    extras_require={
+        'sqlalchemy': ['sqlalchemy>=1.0.15'],
+        'vault': ['hvac>=0.2.16'],
+        'consul': ['requests>=2.11.1'],
+        'elasticsearch': ['elasticsearch>=2.4.0']
+    },
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.6',

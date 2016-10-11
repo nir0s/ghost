@@ -1,8 +1,0 @@
-# Vault Backend
-hvac>=0.2.16
-# Consul Backend
-requests>=2.11.1
-# SQLAlchemy Backend
-sqlalchemy>=1.0.15
-# Elasticsearch Backend
-elasticsearch>=2.4.0

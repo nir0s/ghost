@@ -178,7 +178,8 @@ stash.delete('aws')
 
 ## Backends
 
-NOTE: ghost includes dependencies required for TinyDB only. `optional-requirements.txt` contain dependencies for other backends.
+NOTE: ghost includes dependencies required for TinyDB only. `
+You can install extras for each specific backend. See below.
 
 NOTE: Whlie true for the API, the CLI does not currently expose any advanced configuration for the Vault and Consul backends such as setting certs, credentials or paths.
 
@@ -190,7 +191,9 @@ The TinyDB backend provides an easy to read, portable JSON file based stash. It 
 
 ### [SQLAlchemy](http://www.sqlalchemy.org)
 
-(Tested on v1.0.15)
+(Initially tested on v1.0.15)
+
+To enable, run `pip install ghost[sqlalchemy]`
 
 The SQLAlchemy backend provides a way to use all well known SQL databases as backends including a local sqlite file. Functionally, the sqlite backend resembles the TinyDB backend, but is not humanly readable.
 
@@ -198,19 +201,25 @@ All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the l
 
 ### [Elasticsearch](http://elastic.co)
 
-(Tested on v2.4.1 using elasticsearch-py 2.4.0)
+(Initially tested on v2.4.1 using elasticsearch-py 2.4.0)
+
+To enable, run `pip install ghost[elasticsearch]`
 
 The Elasticsearch resembles the TinyDB backend in that it simply stores JSON documents. An Index called `ghost` is created in the cluster (unless another index name is provided via the API) and used to store the keys.
 
 ### [Consul](http://www.consul.io)
 
-(Tested on v0.7.0)
+(Initially tested on v0.7.0)
+
+To enable, run `pip install ghost[consul]`
 
 The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but that is of course not recommended to prevent dataloss.
 
 ### [Vault](http://www.vaultproject.io)
 
-(Tested on v0.6.1)
+(Initially tested on v0.6.1 using hvac 0.2.16)
+
+To enable, run `pip install ghost[vault]`
 
 NOTE: You MUST provide your Vault token either via the API or via the `VAULT_TOKEN` env var to use the Vault backend.
 
@@ -239,7 +248,11 @@ So, for instance, if you have a local implementation using sqlite, you could exp
 The `migrate` command will allow you to easily migrate all of your keys from one backend to another like so:
 
 ```bash
-ghost migrate my_stash.json postgresql://localhost/ghost --source-passphrase 123 --destination-passphrase 321 --source-backend tinydb --destination-backend sqlalchemy
+ghost migrate my_stash.json postgresql://localhost/ghost \
+  --source-passphrase 123 \
+  --destination-passphrase 321 \
+  --source-backend tinydb \
+  --destination-backend sqlalchemy
 ```
 
 Note that using the `migrate` command (or API) will result in keys being decrypted and reencrypted on the destination stash.
@@ -273,6 +286,7 @@ tox
 
 ## Contributions..
 
-You can add additional backends by implementing a single class which implements the `init`, `put`, `get`, `delete` and `list` methods. Both the TinyDB and SQLAlchemy implementations are extremely lightweight and can be used as reference implementations.
+See [CONTRIBUTIONS](https://github.com/nir0s/ghost/blob/master/CONTRIBUTING.md)
+on how to contribute additional backends.
 
 Pull requests are always welcome..
