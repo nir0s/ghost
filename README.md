@@ -181,7 +181,7 @@ stash.delete('aws')
 
 ## Backends
 
-NOTE: ghost includes dependencies required for TinyDB only. `
+NOTE: ghost includes dependencies required for TinyDB only as its installation should be light-weight by default. `
 You can install extras for each specific backend. See below.
 
 NOTE: Whlie true for the API, the CLI does not currently expose any advanced configuration for the Vault and Consul backends such as setting certs, credentials or paths.
@@ -195,6 +195,8 @@ The TinyDB backend provides an easy to read, portable JSON file based stash. It 
 ### [SQLAlchemy](http://www.sqlalchemy.org)
 
 (Initially tested on v1.0.15)
+
+NOTE: To use postgre, mysql or the likes, you must have the relevant package installed for SQLAlchemy to work. For instance, providing `postgresql://scott:tiger@localhost/mydatabase` as the path to the backend requires installing `psycopg2` to be installed. Failing to install the relevant package will result in SQLAlchemy raising an error which will state what's missing.
 
 To enable, run `pip install ghost[sqlalchemy]`
 

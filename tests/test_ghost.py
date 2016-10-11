@@ -235,12 +235,12 @@ class TestSQLAlchemyStorage:
         tmpdir = os.path.join(tempfile.mkdtemp())
         shutil.rmtree(tmpdir)
         assert not os.path.isdir(tmpdir)
-        stash_path = 'sqlite:///' + os.path.join(tmpdir, 'stash.json')
+        stash_path = os.path.join(tmpdir, 'stash.json')
         storage = ghost.SQLAlchemyStorage(stash_path)
         try:
             storage.init()
             assert os.path.isdir(tmpdir)
-            engine = create_engine(stash_path)
+            engine = create_engine('sqlite:///' + stash_path)
             inspector = inspect(engine)
             tables = inspector.get_table_names()
             assert 'keys' in tables
@@ -258,7 +258,7 @@ class TestSQLAlchemyStorage:
     def test_init_stash_already_exists(self):
         fd, stash_path = tempfile.mkstemp()
         os.close(fd)
-        storage = ghost.SQLAlchemyStorage('sqlite://' + stash_path)
+        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
         with pytest.raises(ghost.GhostError) as ex:
             storage.init()
         assert 'Stash {0} already initialized'.format(stash_path) \
@@ -268,7 +268,7 @@ class TestSQLAlchemyStorage:
     def test_init_stash_create_directory(self):
         stash_dir = tempfile.mkdtemp()
         shutil.rmtree(stash_dir)
-        stash_path = 'sqlite:///' + os.path.join(stash_dir, 'stash.json')
+        stash_path = os.path.join(stash_dir, 'stash.json')
         try:
             storage = ghost.SQLAlchemyStorage(stash_path)
             assert os.path.isdir(stash_dir) is False
@@ -287,7 +287,7 @@ class TestSQLAlchemyStorage:
         os.chdir(stash_dir)
         stash_path = os.path.join(stash_dir, 'stash.json')
         try:
-            storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+            storage = ghost.SQLAlchemyStorage(stash_path)
             stash = ghost.Stash(storage)
             assert os.path.isfile(stash_path) is False
             stash.init()
@@ -297,7 +297,7 @@ class TestSQLAlchemyStorage:
             shutil.rmtree(stash_dir)
 
     def test_put(self, stash_path):
-        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
         storage.put(dict(
             name='my_key',
@@ -313,7 +313,7 @@ class TestSQLAlchemyStorage:
 
     def test_list(self, stash_path):
         key = {'name': 'my_key'}
-        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
         storage.put(key)
         key_list = storage.list()
@@ -321,14 +321,14 @@ class TestSQLAlchemyStorage:
         assert key['name'] == key_list[0]['name']
 
     def test_empty_list(self, stash_path):
-        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
         key_list = storage.list()
         assert len(key_list) == 0
 
     def test_get_delete(self, stash_path):
         inserted_key = {'name': 'my_key'}
-        storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
+        storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
         storage.put(inserted_key)
         retrieved_key = storage.get('my_key')
