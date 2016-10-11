@@ -25,6 +25,8 @@ ghost aims to provide a secret-store with a single, simple-to-use API supporting
 
 ## Installation
 
+Ghost supports Linux, Windows and OSX on Python 2.6, 2.7 and 3.4+
+
 ```shell
 pip install ghost
 ```
@@ -50,14 +52,15 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  delete  Delete a key from the stash
-  export  Export all keys to a file
-  get     Retrieve a key from the stash
-  init    Init a stash
-  list    List all keys in the stash
-  load    Loads all keys from an exported key file to...
-  purge   Purge the stash from all of its keys
-  put     Insert a key to the stash
+  delete   Delete a key from the stash
+  export   Export all keys to a file
+  get      Retrieve a key from the stash
+  init     Init a stash
+  list     List all keys in the stash
+  load     Load all keys from an exported key file to...
+  migrate  Migrate all keys from a source stash to a...
+  purge    Purge the stash from all of its keys
+  put      Insert a key to the stash
 
 
 # Initializing a stash
