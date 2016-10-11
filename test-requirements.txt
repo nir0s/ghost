@@ -1,0 +1,4 @@
+.[vault]
+.[consul]
+.[sqlalchemy]
+.[elasticsearch]
