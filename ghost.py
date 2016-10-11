@@ -772,6 +772,7 @@ stash_option = click.option(
     '--stash',
     envvar='GHOST_STASH_PATH',
     required=True,
+    type=click.STRING,
     help='Path to the stash (Can be set via the `GHOST_STASH_PATH` '
     'env var)')
 passphrase_option = click.option(
@@ -794,7 +795,7 @@ backend_option = click.option(
 
 
 @main.command(name='init', short_help='Init a stash')
-@click.argument('STASH_PATH', required=False)
+@click.argument('STASH_PATH', required=False, type=click.STRING)
 @click.option('-p',
               '--passphrase',
               default=None,
@@ -831,7 +832,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
             passphrase_file.write(passphrase)
     except (GhostError, OSError) as ex:
         sys.exit(ex)
-    click.echo('Initalized stash at: {0}'.format(stash_path))
+    click.echo('Initialized stash at: {0}'.format(stash_path))
     click.echo(
         'Your passphrase can be found under the `{0}` file in the '
         'current directory'.format(PASSPHRASE_FILENAME))
@@ -1029,8 +1030,8 @@ def load_keys(key_file, stash, passphrase, backend):
 
 
 @main.command(name='migrate')
-@click.argument('SOURCE_STASH_PATH')
-@click.argument('DESTINATION_STASH_PATH')
+@click.argument('SOURCE_STASH_PATH', type=click.STRING)
+@click.argument('DESTINATION_STASH_PATH', type=click.STRING)
 @click.option('-sp',
               '--source-passphrase',
               default=None,

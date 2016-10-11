@@ -109,9 +109,12 @@ class TestUtils:
 
 def _create_temp_file():
     fd, temp_file = tempfile.mkstemp()
-    print('PATH: {0}'.format(temp_file))
-    os.remove(temp_file)
     os.close(fd)
+    print('PATH: {0}'.format(temp_file))
+    try:
+        os.remove(temp_file)
+    except:
+        pass
     return temp_file
 
 
@@ -120,7 +123,10 @@ def stash_path():
     temp_file = _create_temp_file()
     yield temp_file
     if os.path.isfile(temp_file):
-        os.remove(temp_file)
+        try:
+            os.remove(temp_file)
+        except:
+            pass
 
 
 @pytest.fixture
@@ -128,7 +134,10 @@ def temp_file_path():
     temp_file = _create_temp_file()
     yield temp_file
     if os.path.isfile(temp_file):
-        os.remove(temp_file)
+        try:
+            os.remove(temp_file)
+        except:
+            pass
 
 
 def get_tinydb(path):
@@ -139,7 +148,7 @@ def get_tinydb(path):
 class TestTinyDBStorage:
     def test_init(self):
         tmpdir = tempfile.mkdtemp()
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
         assert not os.path.isdir(tmpdir)
         stash_path = os.path.join(tmpdir, 'stash.json')
         storage = ghost.TinyDBStorage(stash_path)
@@ -147,7 +156,7 @@ class TestTinyDBStorage:
             storage.init()
             assert os.path.isdir(tmpdir)
         finally:
-            shutil.rmtree(tmpdir)
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_init_stash_already_exists(self):
         fd, stash_path = tempfile.mkstemp()
@@ -163,7 +172,7 @@ class TestTinyDBStorage:
 
     def test_init_stash_create_directory(self):
         stash_dir = tempfile.mkdtemp()
-        shutil.rmtree(stash_dir)
+        shutil.rmtree(stash_dir, ignore_errors=True)
         stash_path = os.path.join(stash_dir, 'stash.json')
         try:
             storage = ghost.TinyDBStorage(stash_path)
@@ -171,7 +180,7 @@ class TestTinyDBStorage:
             storage.init()
             assert os.path.isdir(stash_dir) is True
         finally:
-            shutil.rmtree(stash_dir)
+            shutil.rmtree(stash_dir, ignore_errors=True)
 
     def test_init_stash_in_current_dir(self):
         """Test this because it depends on the ability
@@ -190,7 +199,7 @@ class TestTinyDBStorage:
             assert os.path.isfile(stash_path) is True
         finally:
             os.chdir(prev_dir)
-            shutil.rmtree(stash_dir)
+            shutil.rmtree(stash_dir, ignore_errors=True)
 
     def test_put(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
@@ -233,14 +242,15 @@ class TestSQLAlchemyStorage:
 
     def test_init(self):
         tmpdir = os.path.join(tempfile.mkdtemp())
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
         assert not os.path.isdir(tmpdir)
         stash_path = os.path.join(tmpdir, 'stash.json')
         storage = ghost.SQLAlchemyStorage(stash_path)
         try:
             storage.init()
             assert os.path.isdir(tmpdir)
-            engine = create_engine('sqlite:///' + stash_path)
+            # engine = create_engine('sqlite:///' + stash_path)
+            engine = create_engine(storage.db_path)
             inspector = inspect(engine)
             tables = inspector.get_table_names()
             assert 'keys' in tables
@@ -253,7 +263,7 @@ class TestSQLAlchemyStorage:
             assert 'modified_at' in columns
             assert 'created_at' in columns
         finally:
-            shutil.rmtree(tmpdir)
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_init_stash_already_exists(self):
         fd, stash_path = tempfile.mkstemp()
@@ -263,11 +273,20 @@ class TestSQLAlchemyStorage:
             storage.init()
         assert 'Stash {0} already initialized'.format(stash_path) \
             in str(ex.value)
-        os.remove(stash_path)
+        try:
+            os.remove(stash_path)
+        except:
+            pass
+
+    def test_db_path_not_sqlite(self):
+        db_path = 'postgresql+psycopg2://user:password@localhost/ghost'
+        storage = ghost.SQLAlchemyStorage(db_path)
+        assert storage.db_path == db_path
+        assert storage._local_path is None
 
     def test_init_stash_create_directory(self):
         stash_dir = tempfile.mkdtemp()
-        shutil.rmtree(stash_dir)
+        shutil.rmtree(stash_dir, ignore_errors=True)
         stash_path = os.path.join(stash_dir, 'stash.json')
         try:
             storage = ghost.SQLAlchemyStorage(stash_path)
@@ -275,7 +294,7 @@ class TestSQLAlchemyStorage:
             storage.init()
             assert os.path.isdir(stash_dir) is True
         finally:
-            shutil.rmtree(stash_dir)
+            shutil.rmtree(stash_dir, ignore_errors=True)
 
     def test_init_stash_in_current_dir(self):
         """Test this because it depends on the ability
@@ -294,7 +313,7 @@ class TestSQLAlchemyStorage:
             assert os.path.isfile(stash_path) is True
         finally:
             os.chdir(prev_dir)
-            shutil.rmtree(stash_dir)
+            shutil.rmtree(stash_dir, ignore_errors=True)
 
     def test_put(self, stash_path):
         storage = ghost.SQLAlchemyStorage(stash_path)
@@ -303,7 +322,8 @@ class TestSQLAlchemyStorage:
             name='my_key',
             value={'key': 'value'},
             description='desc'))
-        engine = create_engine('sqlite:///' + stash_path)
+        # engine = create_engine('sqlite:///' + stash_path)
+        engine = create_engine(storage.db_path)
         results = engine.execute(sql.select(
             [storage.keys], storage.keys.c.name == 'my_key'))
         for result in results:
@@ -535,7 +555,7 @@ class TestVaultStorage:
 
     def test_key_path(self):
         storage = ghost.VaultStorage(token='a')
-        assert storage._key_path('my_key') == 'secret/my_key'
+        assert storage._key_path('my_key') == os.path.join('secret', 'my_key')
 
     @mock.patch('hvac.Client', HvacClient)
     def test_put_get_delete(self):
@@ -938,15 +958,18 @@ def test_cli_stash(stash_path):
     fd, passphrase_file_path = tempfile.mkstemp()
     os.close(fd)
     ghost.PASSPHRASE_FILENAME = passphrase_file_path
-    _invoke('init_stash {0}'.format(stash_path))
+    _invoke('init_stash "{0}"'.format(stash_path))
     os.environ['GHOST_STASH_PATH'] = stash_path
     with open(passphrase_file_path) as passphrase_file:
         passphrase = passphrase_file.read()
     os.environ['GHOST_PASSPHRASE'] = passphrase
     os.environ['GHOST_BACKEND_TYPE'] = 'tinydb'
     yield ghost.Stash(ghost.TinyDBStorage(stash_path), passphrase)
-    os.remove(passphrase_file_path)
-    os.remove(stash_path)
+    try:
+        os.remove(passphrase_file_path)
+        os.remove(stash_path)
+    except:
+        pass
 
 
 class TestCLI:
@@ -958,7 +981,7 @@ class TestCLI:
         assert_stash_initialized(test_cli_stash._storage.db_path)
 
     def test_init_already_initialized(self, test_cli_stash):
-        result = _invoke('init_stash {0}'.format(
+        result = _invoke('init_stash "{0}"'.format(
             os.environ['GHOST_STASH_PATH']))
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
@@ -1053,7 +1076,7 @@ class TestCLI:
     def test_export(self, test_cli_stash, temp_file_path):
         _invoke('put_key aws key=value')
         _invoke('put_key gcp key=value')
-        _invoke('export_keys -o {0}'.format(temp_file_path))
+        _invoke('export_keys -o "{0}"'.format(temp_file_path))
         with open(temp_file_path) as exported_stash:
             data = json.loads(exported_stash.read())
         assert data[0]['name'] == 'aws'
@@ -1061,7 +1084,7 @@ class TestCLI:
         assert data[1]['name'] == 'gcp'
 
     def test_export_no_keys(self, test_cli_stash, temp_file_path):
-        result = _invoke('export_keys -o {0}'.format(temp_file_path))
+        result = _invoke('export_keys -o "{0}"'.format(temp_file_path))
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'There are no keys to export' in result.output
@@ -1070,11 +1093,11 @@ class TestCLI:
         _invoke('put_key aws key=value')
         _invoke('put_key gcp key=value')
         key_list = test_cli_stash.list()
-        _invoke('export_keys -o {0}'.format(temp_file_path))
+        _invoke('export_keys -o "{0}"'.format(temp_file_path))
         _invoke('purge_stash -f')
         result = _invoke('list_keys -j')
         assert 'The stash is empty' in result.output
-        _invoke('load_keys {0}'.format(temp_file_path))
+        _invoke('load_keys "{0}"'.format(temp_file_path))
         result = _invoke('list_keys -j')
         assert json.loads(result.output) == key_list
 
@@ -1082,7 +1105,7 @@ class TestCLI:
         migration_params, destination_stash = _create_migration_env(
             test_stash, temp_file_path)
         _invoke(
-            'migrate_stash {src_path} {dst_path} '
+            'migrate_stash "{src_path}" "{dst_path}" '
             '-sp {src_passphrase} -dp {dst_passphrase} '
             '-sb {src_backend} -db {dst_backend}'.format(**migration_params))
         assert len(destination_stash.list()) == 3
@@ -1097,12 +1120,15 @@ class TestCLI:
         os.close(fd)
         try:
             result = _invoke(
-                'migrate_stash {0} {dst_path} '
+                'migrate_stash "{0}" "{dst_path}" '
                 '-sp {src_passphrase} -dp {dst_passphrase} '
                 '-sb {src_backend} -db {dst_backend}'.format(
                     invalid_stash, **migration_params))
         finally:
-            os.remove(invalid_stash)
+            try:
+                os.remove(invalid_stash)
+            except:
+                pass
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'There are no keys to export' in result.output
