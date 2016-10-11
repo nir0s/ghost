@@ -1,3 +1,6 @@
+**0.4.1 (2016-10-11)
+* Fix any remaining Windows related issues and fix the tests. Windows support is now official.
+
 **0.4.0 (2016-10-11)
 * Add a Vault backend
 * Add an Elasticsearch backend
