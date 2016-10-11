@@ -29,10 +29,10 @@ import warnings
 from datetime import datetime
 
 try:
-    from urllib.parse import urljoin
+    from urllib.parse import urljoin, urlparse
 except ImportError:
     # python 2
-    from urlparse import urljoin
+    from urlparse import urljoin, urlparse
 
 import click
 
@@ -76,7 +76,7 @@ except ImportError:
 GHOST_HOME = user_data_dir('ghost')
 STORAGE_DEFAULT_PATH_MAPPING = {
     'tinydb': os.path.join(GHOST_HOME, 'stash.json'),
-    'sqlalchemy': 'sqlite:///{0}/stash.sql'.format(GHOST_HOME),
+    'sqlalchemy': os.path.join(GHOST_HOME, 'stash.sql'),
     'consul': 'http://127.0.0.1:8500',
     'vault': 'http://127.0.0.1:8200',
     'elasticsearch': 'http://127.0.0.1:9200'
@@ -390,7 +390,16 @@ class SQLAlchemyStorage(object):
     def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['sqlalchemy']):
         if not SQLALCHEMY_EXISTS:
             raise ImportError('SQLAlchemy must be installed first')
-        self.db_path = db_path
+        if 'sqlite' in db_path:
+            self.db_path = db_path
+            self._local_path = urlparse(db_path).path[1:]
+        elif '://' in db_path:
+            self.db_path = db_path
+            self._local_path = None
+        else:
+            self.db_path = 'sqlite:///' + db_path
+            self._local_path = db_path
+
         self.metadata = MetaData()
 
         self.keys = Table(
@@ -413,14 +422,14 @@ class SQLAlchemyStorage(object):
         return self._db
 
     def init(self):
-        if 'sqlite://' in self.db_path:
-            path = os.path.expanduser(self.db_path).split('://')[1]
-            dirname = os.path.dirname(path)
+        if self._local_path:
+            dirname = os.path.dirname(self._local_path)
             if dirname and not os.path.isdir(dirname):
-                os.makedirs(os.path.dirname(path))
-            elif os.path.isfile(path):
+                os.makedirs(dirname)
+            elif os.path.isfile(self._local_path):
                 raise GhostError('Stash {0} already initialized'.format(
-                    path))
+                    self._local_path))
+
         # More on connection strings for sqlalchemy:
         # http://docs.sqlalchemy.org/en/latest/core/engines.html
         self.metadata.bind = self.db
@@ -820,7 +829,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
         passphrase = stash.init()
         with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
             passphrase_file.write(passphrase)
-    except GhostError as ex:
+    except (GhostError, OSError) as ex:
         sys.exit(ex)
     click.echo('Initalized stash at: {0}'.format(stash_path))
     click.echo(
