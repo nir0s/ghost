@@ -47,7 +47,7 @@ def _invoke(command):
     return cfy.invoke(getattr(ghost, func), params)
 
 
-class TestUtils:
+class TestGeneral:
     def test_get_current_time(self):
         assert len(ghost._get_current_time()) == 19
 
@@ -105,6 +105,28 @@ class TestUtils:
     def test_prettify_list_input_not_list(self):
         with pytest.raises(AssertionError):
             ghost._prettify_list('')
+
+    def test_get_passphrase(self):
+        def _make_temp_passphrase_file():
+            fd, temp_file_path = tempfile.mkstemp()
+            os.close(fd)
+            os.remove(temp_file_path)
+            return temp_file_path
+
+        tempfile1 = _make_temp_passphrase_file()
+        tempfile2 = _make_temp_passphrase_file()
+
+        passphrase = '123'
+        assert isinstance(ghost.POTENTIAL_PASSPHRASE_LOCATIONS, list)
+        ghost.POTENTIAL_PASSPHRASE_LOCATIONS = [tempfile1, tempfile2]
+        assert ghost.get_passphrase() is None
+        for passphrase_file_path in ghost.POTENTIAL_PASSPHRASE_LOCATIONS:
+            try:
+                with open(passphrase_file_path, 'w') as passphrase_file:
+                    passphrase_file.write(passphrase)
+                assert ghost.get_passphrase() == passphrase
+            finally:
+                os.remove(passphrase_file_path)
 
 
 def _create_temp_file():

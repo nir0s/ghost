@@ -25,7 +25,6 @@ setup(
     install_requires=[
         "click==6.6",
         "tinydb==3.2.1",
-        "appdirs==1.4.0",
         "cryptography>=1.5"
     ],
     extras_require={
