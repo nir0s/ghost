@@ -771,7 +771,6 @@ stash_option = click.option(
     '-s',
     '--stash',
     envvar='GHOST_STASH_PATH',
-    required=True,
     type=click.STRING,
     help='Path to the stash (Can be set via the `GHOST_STASH_PATH` '
     'env var)')

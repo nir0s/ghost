@@ -184,9 +184,9 @@ stash.delete('aws')
 NOTE: ghost includes dependencies required for TinyDB only as its installation should be light-weight by default. `
 You can install extras for each specific backend. See below.
 
-NOTE: Whlie true for the API, the CLI does not currently expose any advanced configuration for the Vault and Consul backends such as setting certs, credentials or paths.
+NOTE: While true for the API, the CLI does not currently expose any advanced configuration for the backends such as setting certs, credentials or paths.
 
-Until the API documentation is complete, please take a look at the Storage API's on host to use each storage.
+Until the API documentation is complete, please take a look at the Storage API's on how to use each storage.
 
 ### [TinyDB](http://tinydb.readthedocs.io/en/latest/usage.html)
 
@@ -196,13 +196,13 @@ The TinyDB backend provides an easy to read, portable JSON file based stash. It 
 
 (Initially tested on v1.0.15)
 
-NOTE: To use postgre, mysql or the likes, you must have the relevant package installed for SQLAlchemy to work. For instance, providing `postgresql://scott:tiger@localhost/mydatabase` as the path to the backend requires installing `psycopg2` to be installed. Failing to install the relevant package will result in SQLAlchemy raising an error which will state what's missing.
+NOTE: To use postgre, mysql and the likes, you must have the relevant package installed for SQLAlchemy to work. For instance, providing `postgresql://scott:tiger@localhost/mydatabase` as the path to the backend requires installing `psycopg2`. Failing to install the relevant package will result in SQLAlchemy raising an error which will state what's missing.
 
 To enable, run `pip install ghost[sqlalchemy]`
 
-The SQLAlchemy backend provides a way to use all well known SQL databases as backends including a local sqlite file. Functionally, the sqlite backend resembles the TinyDB backend, but is not humanly readable.
+The SQLAlchemy backend provides a way to use all well known SQL databases as backends including a local sqlite file. Functionally, the sqlite SQLAlchemy based backend resembles the TinyDB backend, but is not humanly readable.
 
-All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the likes are easily accessible as long as you provide the correct connection string.
+All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the likes are easily accessible
 
 ### [Elasticsearch](http://elastic.co)
 
@@ -210,7 +210,7 @@ All SQLAlchemy connection strings are allowed so Postgre, MySQL, MSSQL and the l
 
 To enable, run `pip install ghost[elasticsearch]`
 
-The Elasticsearch resembles the TinyDB backend in that it simply stores JSON documents. An Index called `ghost` is created in the cluster (unless another index name is provided via the API) and used to store the keys.
+The Elasticsearch backend resembles the TinyDB backend in that it simply stores JSON documents. An Index called `ghost` is created in the cluster (unless another index name is provided via the API) and used to store the keys.
 
 ### [Consul](http://www.consul.io)
 
@@ -218,7 +218,7 @@ The Elasticsearch resembles the TinyDB backend in that it simply stores JSON doc
 
 To enable, run `pip install ghost[consul]`
 
-The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but that is of course not recommended to prevent dataloss.
+The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but to prevent dataloss, that is of course not recommended.
 
 ### [Vault](http://www.vaultproject.io)
 
@@ -265,7 +265,7 @@ Note that using the `migrate` command (or API) will result in keys being decrypt
 
 ## Secret key delegation
 
-Since ghost doesn't run as a server, it doesn't provide a formal method for delegating keys to a server without explicitly passing them over in plain text post-decryption. You can work around that by retrieving a key without decrypting it (via the `--no-decrypt` flag in the CLI or the `decrypt` argument in the Python API) and sending it to the other server where the same passphrase is held and decrypting  it there.
+Since ghost doesn't run as a distributed server, it doesn't provide a formal method for delegating keys to a server without explicitly passing them over in plain text post-decryption. You can work around that by retrieving a key without decrypting it (via the `--no-decrypt` flag in the CLI or the `decrypt` argument in the Python API) and sending it to the other server where the same passphrase is held and decrypting  it there.
 
 This can be done somewhat like this:
 
