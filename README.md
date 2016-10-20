@@ -218,6 +218,9 @@ The Elasticsearch backend resembles the TinyDB backend in that it simply stores 
 
 To enable, run `pip install ghost[consul]`
 
+NOTE: As per [consul's documentation], you cannot provide values larger
+than 512kb.
+
 The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but to prevent dataloss, that is of course not recommended.
 
 ### [Vault](http://www.vaultproject.io)
