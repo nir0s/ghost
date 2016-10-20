@@ -66,16 +66,15 @@ Commands:
 # Initializing a stash
 $ ghost init
 Initializing stash...
-Initialized stash at: /home/nir0s/.local/share/ghost/stash.json
+Initialized stash at: /home/nir0s/.ghost/stash.json
 Your passphrase can be found under the `passphrase.ghost` file in the current directory
 Make sure you save your passphrase somewhere safe. If lost, any access to your stash will be impossible.
 ...
 
-$ export GHOST_STASH_PATH='~/.local/share/ghost/my_stash.json'
 $ export GHOST_PASSPHRASE=$(cat passphrase.ghost)
 
 $ ghost list
-Listing all keys in ~/.local/share/ghost/my_stash.json...
+Listing all keys in /home/nir0s/.ghost/stash.json...
 The stash is empty. Go on, put some keys in there...
 
 # Putting keys in the stash
@@ -130,7 +129,7 @@ Name:          gcp
 
 # Listing the existing keys
 $ ghost list
-Listing all keys in ~/.local/share/ghost/my_stash.json...
+Listing all keys in /home/nir0s/.ghost/stash.json...
 Available Keys:
   - aws
   - gcp
@@ -142,10 +141,10 @@ Deleting key...
 
 # Deleting all keys
 $ ghost purge -f
-Purging stash ~/.local/share/ghost/my_stash.json...
+Purging stash /home/nir0s/.ghost/stash.json...
 
 $ ghost list
-Listing all keys in ~/.local/share/ghost/my_stash.json...
+Listing all keys in /home/nir0s/.ghost/stash.json...
 The stash is empty. Go on, put some keys in there...
 ...
 ```
@@ -160,7 +159,7 @@ NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlche
 import ghost
 
 # Initialize a new stash
-storage = TinyDBStorage(db_path='~/.local/share/ghost/stash.json')
+storage = TinyDBStorage(db_path='/home/nir0s/.ghost/stash.json')
 # Can also generate a passphrase via `ghost.generate_passphrase(size=20)`
 stash = Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
@@ -178,6 +177,26 @@ stash.list()
 # Delete a key
 stash.delete('aws')
 ```
+
+## Passphrase file generation and discovery
+
+When initializing a stash, ghost generates a passphrase file containing either the passphrase you explicitly provide or an auto-generated one. The file is saved under `cwd/passphrase.ghost`. After having been generated, you can read the file into an environment variable to use it like so:
+
+```bash
+export GHOST_PASSPHRASE=$(cat passphrase.ghost)
+```
+
+To simplify UX when using the CLI, ghost discovers the `passphrase.ghost` file generated when initializing the a stash and uses it unless told otherwise.
+
+unless the `--passphrase` flag or `GHOST_PASSPHRASE` env var are set, ghost will search for the `passphrase.ghost` file under:
+
+1. `cwd/passphrase.ghost`
+2. `~/.ghost/passphrase.ghost`
+3. (Only non-Windows) `/etc/ghost/passphrase.ghost`
+
+The Python API requires passing the passphrase explicitly to the Stash class when generating its instance.
+
+It is important to note that if you regularly use two storage backends, you might not want to use the auto-discovery mechanism at all as to not accidently try to use one key with a mismatching stash.
 
 ## Backends
 
