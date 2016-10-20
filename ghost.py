@@ -31,7 +31,6 @@ from datetime import datetime
 try:
     from urllib.parse import urljoin, urlparse
 except ImportError:
-    # python 2
     from urlparse import urljoin, urlparse
 
 import click
@@ -118,57 +117,6 @@ class Stash(object):
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
 
-    @property
-    def key(self):
-        if self._key is None:
-            passphrase = self.passphrase.encode('utf-8')
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=b'ghost',
-                iterations=1000000,
-                backend=default_backend())
-            self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
-        return self._key
-
-    @property
-    def cipher(self):
-        return Fernet(self.key)
-
-    def _encrypt(self, value):
-        """Turn a json serializable value into an jsonified, encrypted,
-        hexa string.
-        """
-        value = json.dumps(value)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            encrypted_value = self.cipher.encrypt(value.encode('utf8'))
-        hexified_value = binascii.hexlify(encrypted_value).decode('ascii')
-        return hexified_value
-
-    def _decrypt(self, hexified_value):
-        """The exact opposite of _encrypt
-        """
-        encrypted_value = binascii.unhexlify(hexified_value)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            jsonified_value = self.cipher.decrypt(
-                encrypted_value).decode('ascii')
-        value = json.loads(jsonified_value)
-        return value
-
-    def _handle_existing_key(self, key_name, modify):
-        existing_key = self._storage.get(key_name) or {}
-        if existing_key and modify:
-            self._storage.delete(key_name)
-        elif existing_key:
-            raise GhostError(
-                'The key already exists. Use the modify flag to overwrite')
-        elif modify:
-            raise GhostError(
-                "The key doesn't exist and therefore cannot be modified")
-        return existing_key
-
     def init(self):
         self._storage.init()
         self.put(
@@ -249,18 +197,20 @@ class Stash(object):
             key['value'] = self._decrypt(key['value'])
         return key
 
-    def delete(self, key_name):
-        """Delete a key if it exists.
-        """
-        deleted = self._storage.delete(key_name)
-        if not deleted:
-            raise GhostError('Key {0} not found'.format(key_name))
-
     def list(self):
         """Return a list of all keys.
         """
         return [key['name'] for key in self._storage.list()
                 if key['name'] != 'stored_passphrase']
+
+    def delete(self, key_name):
+        """Delete a key if it exists.
+        """
+        if not self.get(key_name):
+            raise GhostError('Key {0} not found'.format(key_name))
+        deleted = self._storage.delete(key_name)
+        if not deleted:
+            raise GhostError('Failed to delete {0}'.format(key_name))
 
     def purge(self, force=False):
         """Purge the stash from all keys
@@ -313,6 +263,57 @@ class Stash(object):
                 description=key['description'],
                 encrypt=encrypt)
 
+    @property
+    def key(self):
+        if self._key is None:
+            passphrase = self.passphrase.encode('utf-8')
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=b'ghost',
+                iterations=1000000,
+                backend=default_backend())
+            self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
+        return self._key
+
+    @property
+    def cipher(self):
+        return Fernet(self.key)
+
+    def _encrypt(self, value):
+        """Turn a json serializable value into an jsonified, encrypted,
+        hexa string.
+        """
+        value = json.dumps(value)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            encrypted_value = self.cipher.encrypt(value.encode('utf8'))
+        hexified_value = binascii.hexlify(encrypted_value).decode('ascii')
+        return hexified_value
+
+    def _decrypt(self, hexified_value):
+        """The exact opposite of _encrypt
+        """
+        encrypted_value = binascii.unhexlify(hexified_value)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            jsonified_value = self.cipher.decrypt(
+                encrypted_value).decode('ascii')
+        value = json.loads(jsonified_value)
+        return value
+
+    def _handle_existing_key(self, key_name, modify):
+        existing_key = self._storage.get(key_name) or {}
+        if existing_key and modify:
+            self._storage.delete(key_name)
+        elif existing_key:
+            raise GhostError(
+                'The key already exists. Use the modify flag to overwrite')
+        elif modify:
+            raise GhostError(
+                "The key doesn't exist and therefore cannot be modified")
+        return existing_key
+
 
 def migrate(src_path,
             src_passphrase,
@@ -339,16 +340,6 @@ class TinyDBStorage(object):
         self.db_path = os.path.expanduser(db_path)
         self._db = None
 
-    @property
-    def db(self):
-        if self._db is None:
-            self._db = TinyDB(
-                self.db_path,
-                indent=4,
-                sort_keys=True,
-                separators=(',', ': '))
-        return self._db
-
     def init(self):
         dirname = os.path.dirname(self.db_path)
         if dirname and not os.path.isdir(dirname):
@@ -361,6 +352,24 @@ class TinyDBStorage(object):
         """Insert the key and return its database id
         """
         return self.db.insert(key)
+
+    def get(self, key_name):
+        """Return a dictionary consisting of the key itself
+
+        e.g.
+        {u'created_at': u'2016-10-10 08:31:53',
+         u'description': None,
+         u'metadata': None,
+         u'modified_at': u'2016-10-10 08:31:53',
+         u'name': u'aws',
+         u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
+         u'value': u'the_value'}
+
+        """
+        result = self.db.search(Query().name == key_name)
+        if not result:
+            return {}
+        return result[0]
 
     def list(self):
         """Return a list of all keys (not just key names, but rather the keys
@@ -386,28 +395,21 @@ class TinyDBStorage(object):
         # TODO: Return only the key names from all storages
         return self.db.search(Query().name.matches('.*'))
 
-    def get(self, key_name):
-        """Return a dictionary consisting of the key itself
-
-        e.g.
-        {u'created_at': u'2016-10-10 08:31:53',
-         u'description': None,
-         u'metadata': None,
-         u'modified_at': u'2016-10-10 08:31:53',
-         u'name': u'aws',
-         u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
-         u'value': u'the_value'}
-
-        """
-        result = self.db.search(Query().name == key_name)
-        if not result:
-            return {}
-        return result[0]
-
     def delete(self, key_name):
         """Delete the key and return true if the key was deleted, else false
         """
-        return self.db.remove(Query().name == key_name)
+        self.db.remove(Query().name == key_name)
+        return self.get(key_name) == {}
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = TinyDB(
+                self.db_path,
+                indent=4,
+                sort_keys=True,
+                separators=(',', ': '))
+        return self._db
 
 
 class SQLAlchemyStorage(object):
@@ -425,7 +427,6 @@ class SQLAlchemyStorage(object):
             self._local_path = db_path
 
         self.metadata = MetaData()
-
         self.keys = Table(
             'keys',
             self.metadata,
@@ -436,14 +437,7 @@ class SQLAlchemyStorage(object):
             Column('modified_at', String),
             Column('created_at', String),
             Column('uid', String))
-
         self._db = None
-
-    @property
-    def db(self):
-        if self._db is None:
-            self._db = create_engine(self.db_path)
-        return self._db
 
     def init(self):
         if self._local_path:
@@ -460,26 +454,7 @@ class SQLAlchemyStorage(object):
         self.metadata.create_all()
 
     def put(self, key):
-        """
-        `key` is the dictionary representing the key
-        """
         return self.db.execute(self.keys.insert(), **key).lastrowid
-
-    def _construct_key(self, values):
-        """Return a dictionary representing a key from a list of columns
-        and a tuple of values
-        """
-        key = {}
-        for column, value in zip(self.keys.columns, values):
-            key.update({column.name: value})
-        return key
-
-    def list(self):
-        all_key_values = self.db.execute(sql.select([self.keys]))
-        key_list = []
-        for key_values in all_key_values:
-            key_list.append(self._construct_key(key_values))
-        return key_list
 
     def get(self, key_name):
         results = self.db.execute(sql.select(
@@ -496,10 +471,32 @@ class SQLAlchemyStorage(object):
             return {}
         return self._construct_key(key_values)
 
+    def list(self):
+        all_key_values = self.db.execute(sql.select([self.keys]))
+        key_list = []
+        for key_values in all_key_values:
+            key_list.append(self._construct_key(key_values))
+        return key_list
+
     def delete(self, key_name):
         result = self.db.execute(
             self.keys.delete().where(self.keys.c.name == key_name))
         return result.rowcount > 0
+
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = create_engine(self.db_path)
+        return self._db
+
+    def _construct_key(self, values):
+        """Return a dictionary representing a key from a list of columns
+        and a tuple of values
+        """
+        key = {}
+        for column, value in zip(self.keys.columns, values):
+            key.update({column.name: value})
+        return key
 
 
 class ConsulStorage(object):
@@ -517,6 +514,41 @@ class ConsulStorage(object):
         self._session.cert = client_cert
         self._session.auth = auth
 
+    def init(self):
+        """Consul creates directories on the fly, so no init is required."""
+
+    def put(self, key):
+        """Put and return the only unique identifier possible, its url
+        """
+        return self._consul_request(
+            'PUT', self._key_url(key['name']), json=key)
+        return self._key_url(key['name'])
+
+    def get(self, key_name):
+        value = self._consul_request('GET', self._key_url(key_name))
+        if value is None:
+            return {}
+        return self._decode(value[0])
+
+    def list(self):
+        keys = self._consul_request('GET', self._url + '?recurse')
+        return [self._decode(key) for key in keys]
+
+    def delete(self, key_name):
+        self._consul_request('DELETE', self._key_url(key_name))
+        # Consul returns either true or false for delete operations.
+        # Instead of relying on it, we actually check that the key
+        # is not retrieveable
+        return self.get(key_name) == {}
+
+    def _decode(self, data):
+        """Decode one key as returned by consul.
+
+        The format of the data returned is [{'Value': base-64-encoded-json,
+        'Key': keyname}]. We need to decode and return just the values.
+        """
+        return json.loads(base64.b64decode(data['Value']).decode('utf-8'))
+
     def _key_url(self, key):
         return urljoin(self._url, key)
 
@@ -530,37 +562,6 @@ class ConsulStorage(object):
                              method, url, response.status_code,
                              response.content))
         return response.json()
-
-    def init(self):
-        """Consul creates directories on the fly, so no init is required."""
-
-    def put(self, key):
-        """
-        `key` is the dictionary representing the key
-        """
-        return self._consul_request(
-            'PUT', self._key_url(key['name']), json=key)
-
-    def _decode(self, data):
-        """Decode one key as returned by consul.
-
-        The format of the data returned is [{'Value': base-64-encoded-json,
-        'Key': keyname}]. We need to decode and return just the values.
-        """
-        return json.loads(base64.b64decode(data['Value']).decode('utf-8'))
-
-    def list(self):
-        keys = self._consul_request('GET', self._url + '?recurse')
-        return [self._decode(k) for k in keys]
-
-    def get(self, key_name):
-        value = self._consul_request('GET', self._key_url(key_name))
-        if value is None:
-            return {}
-        return self._decode(value[0])
-
-    def delete(self, key_name):
-        return self._consul_request('DELETE', self._key_url(key_name))
 
 
 class VaultStorage(object):
@@ -581,21 +582,21 @@ class VaultStorage(object):
         self.client = hvac.Client(url=db_path, token=token, cert=cert)
         self.path = path
 
-    def _key_path(self, key_name):
-        """Return a valid vault path
-
-        Note that we don't use os.path.join as the path is read by vault using
-        slashes even on Windows.
-        """
-        return self.path + '/' + key_name
-
     def init(self):
         """
         """
 
     def put(self, key):
-        # TODO: Check if vault has a uid of a secret to return
+        """Put and return the only unique identifier possible, its path
+        """
         self.client.write(self._key_path(key['name']), **key)
+        return self._key_path(key['name'])
+
+    def get(self, key_name):
+        vault_record = self.client.read(self._key_path(key_name))
+        if not vault_record:
+            return {}
+        return self._convert_vault_record_to_ghost_record(vault_record)
 
     def list(self):
         keys = self.client.list(self.path)
@@ -607,6 +608,18 @@ class VaultStorage(object):
             key_list.append(self.get(key_name))
         return key_list
 
+    def delete(self, key_name):
+        self.client.delete(self._key_path(key_name))
+        return self.get(key_name) == {}
+
+    def _key_path(self, key_name):
+        """Return a valid vault path
+
+        Note that we don't use os.path.join as the path is read by vault using
+        slashes even on Windows.
+        """
+        return self.path + '/' + key_name
+
     @staticmethod
     def _convert_vault_record_to_ghost_record(vault_record):
         ghost_record = dict(**vault_record['data'])
@@ -614,16 +627,6 @@ class VaultStorage(object):
         del vault_record['data']
         ghost_record['metadata'].update(vault_record)
         return ghost_record
-
-    def get(self, key_name):
-        vault_record = self.client.read(self._key_path(key_name))
-        if not vault_record:
-            return {}
-        return self._convert_vault_record_to_ghost_record(vault_record)
-
-    def delete(self, key_name):
-        self.client.delete(self._key_path(key_name))
-        return self.get(key_name) == {}
 
 
 class ElasticsearchStorage(object):
@@ -657,6 +660,12 @@ class ElasticsearchStorage(object):
         document = self.es.index(body=key, **self.params)
         return document['_id']
 
+    def get(self, key_name):
+        document_list = self._get_document(key_name)
+        if not document_list:
+            return {}
+        return document_list[0]['_source']
+
     def list(self):
         query = {"query": {"match_all": {}}}
         result = self.es.search(
@@ -667,20 +676,6 @@ class ElasticsearchStorage(object):
         for key in result['hits']['hits']:
             key_list.append(key['_source'])
         return key_list
-
-    def _get_document(self, key_name):
-        query = {"query": {"match": {"name": key_name}}}
-        result = self.es.search(
-            body=query,
-            filter_path=['hits.hits._source', 'hits.hits._id'],
-            **self.params)
-        return result['hits']['hits'] if result else {}
-
-    def get(self, key_name):
-        document_list = self._get_document(key_name)
-        if not document_list:
-            return {}
-        return document_list[0]['_source']
 
     def delete(self, key_name):
         document_list = self._get_document(key_name)
@@ -696,6 +691,14 @@ class ElasticsearchStorage(object):
         # any chances here but rather verifying that you can't
         # get that key anymore.
         return self.get(key_name) == {}
+
+    def _get_document(self, key_name):
+        query = {"query": {"match": {"name": key_name}}}
+        result = self.es.search(
+            body=query,
+            filter_path=['hits.hits._source', 'hits.hits._id'],
+            **self.params)
+        return result['hits']['hits'] if result else {}
 
 
 def _get_current_time():

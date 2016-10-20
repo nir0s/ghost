@@ -167,6 +167,54 @@ def get_tinydb(path):
         return json.loads(db.read())['_default']
 
 
+class TestStorage(object):
+    @staticmethod
+    def put(structure):
+        assert isinstance(structure, (str, int))
+
+    @staticmethod
+    def get_nonexisting_key(structure):
+        assert isinstance(structure, dict)
+        assert not structure
+
+    @staticmethod
+    def get(structure):
+        assert isinstance(structure, dict)
+        assert isinstance(structure['value'], dict)
+        assert isinstance(structure['metadata'], dict)
+        str(structure['name'])
+        str(structure['uid'])
+        str(structure['description'])
+
+    @staticmethod
+    def delete(structure):
+        assert isinstance(structure, bool)
+
+    def list(self, structure):
+        assert isinstance(structure, list)
+        for key in structure:
+            self.get(key)
+
+    @staticmethod
+    def empty_list(structure):
+        assert isinstance(structure, list)
+        assert len(structure) == 0
+
+
+storage_tester = TestStorage()
+
+
+BASE_TEST_KEY = {
+    'name': 'my_key',
+    'value': {'a': 'b'},
+    'metadata': {},
+    'created_at': '',
+    'modified_at': '',
+    'uid': '',
+    'description': 'My Key'
+}
+
+
 class TestTinyDBStorage:
     def test_init(self):
         tmpdir = tempfile.mkdtemp()
@@ -225,39 +273,43 @@ class TestTinyDBStorage:
 
     def test_put(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
-        storage.put({'name': 'my_key'})
+        key_id = storage.put(BASE_TEST_KEY)
         db = get_tinydb(stash_path)
         assert '1' in db
-        assert db['1']['name'] == 'my_key'
+        assert db['1']['name'] == BASE_TEST_KEY['name']
         assert len(db) == 1
+        storage_tester.put(key_id)
 
     def test_list(self, stash_path):
-        key = {'name': 'my_key'}
         storage = ghost.TinyDBStorage(stash_path)
-        storage.put(key)
+        storage.put(BASE_TEST_KEY)
         key_list = storage.list()
-        assert key in key_list
+        assert BASE_TEST_KEY in key_list
         assert len(key_list) == 1
+        storage_tester.list(key_list)
 
     def test_empty_list(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
         key_list = storage.list()
-        assert len(key_list) == 0
+        storage_tester.empty_list(key_list)
 
     def test_get_delete(self, stash_path):
-        inserted_key = {'name': 'my_key'}
+        inserted_key = BASE_TEST_KEY
         storage = ghost.TinyDBStorage(stash_path)
         storage.put(inserted_key)
-        retrieved_key = storage.get('my_key')
+        retrieved_key = storage.get(BASE_TEST_KEY['name'])
         assert inserted_key == retrieved_key
-        storage.delete('my_key')
-        retrieved_key = storage.get('my_key')
-        assert retrieved_key == {}
+        storage_tester.get(retrieved_key)
+
+        result = storage.delete(BASE_TEST_KEY['name'])
+        storage_tester.delete(result)
+
+        key = storage.get(BASE_TEST_KEY['name'])
+        storage_tester.get_nonexisting_key(key)
 
 
 class TestSQLAlchemyStorage:
-    def test_no_sqlalchemy(self):
-        """Without sqlalchemy, an error is thrown as soon as possible."""
+    def test_missing_requirement(self):
         with mock.patch('ghost.SQLALCHEMY_EXISTS', False):
             with pytest.raises(ImportError):
                 ghost.SQLAlchemyStorage()
@@ -271,7 +323,6 @@ class TestSQLAlchemyStorage:
         try:
             storage.init()
             assert os.path.isdir(tmpdir)
-            # engine = create_engine('sqlite:///' + stash_path)
             engine = create_engine(storage.db_path)
             inspector = inspect(engine)
             tables = inspector.get_table_names()
@@ -340,48 +391,50 @@ class TestSQLAlchemyStorage:
     def test_put(self, stash_path):
         storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
-        storage.put(dict(
-            name='my_key',
-            value={'key': 'value'},
-            description='desc'))
-        # engine = create_engine('sqlite:///' + stash_path)
+        key_id = storage.put(BASE_TEST_KEY)
         engine = create_engine(storage.db_path)
         results = engine.execute(sql.select(
-            [storage.keys], storage.keys.c.name == 'my_key'))
+            [storage.keys], storage.keys.c.name == BASE_TEST_KEY['name']))
         for result in results:
-            assert result[0] == 'my_key'
-            assert result[1] == {'key': 'value'}
-            assert result[2] == 'desc'
+            assert result[0] == BASE_TEST_KEY['name']
+            assert result[1] == BASE_TEST_KEY['value']
+            assert result[2] == BASE_TEST_KEY['description']
+
+        storage_tester.put(key_id)
 
     def test_list(self, stash_path):
-        key = {'name': 'my_key'}
         storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
-        storage.put(key)
+        storage.put(BASE_TEST_KEY)
         key_list = storage.list()
         assert len(key_list) == 1
-        assert key['name'] == key_list[0]['name']
+        assert BASE_TEST_KEY['name'] == key_list[0]['name']
+        storage_tester.list(key_list)
 
     def test_empty_list(self, stash_path):
         storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
         key_list = storage.list()
-        assert len(key_list) == 0
+
+        storage_tester.empty_list(key_list)
 
     def test_get_delete(self, stash_path):
-        inserted_key = {'name': 'my_key'}
         storage = ghost.SQLAlchemyStorage(stash_path)
         storage.init()
-        storage.put(inserted_key)
-        retrieved_key = storage.get('my_key')
-        assert inserted_key['name'] == retrieved_key['name']
-        storage.delete('my_key')
-        retrieved_key = storage.get('my_key')
-        assert retrieved_key == {}
+        storage.put(BASE_TEST_KEY)
+        retrieved_key = storage.get(BASE_TEST_KEY['name'])
+        assert BASE_TEST_KEY['name'] == retrieved_key['name']
+        storage_tester.get(retrieved_key)
+
+        result = storage.delete(BASE_TEST_KEY['name'])
+        storage_tester.delete(result)
+
+        key = storage.get(BASE_TEST_KEY['name'])
+        storage_tester.get_nonexisting_key(key)
 
 
 class TestConsulStorage:
-    def test_no_requests(self):
+    def test_missing_requirement(self):
         """Without requests, an error is thrown as soon as possible."""
         with mock.patch('ghost.REQUESTS_EXISTS', False):
             with pytest.raises(ImportError):
@@ -474,10 +527,12 @@ class TestConsulStorage:
 
         with mock.patch.object(storage._session, 'put',
                                side_effect=mock_put) as m:
-            inserted_key = storage.put(original_key)
+            key_id = storage.put(original_key)
 
         assert len(m.mock_calls) == 1
-        assert inserted_key == 'the_name'
+        assert key_id == 'the_name'
+
+        storage_tester.put(key_id)
 
     def test_delete(self):
         """Deleting an existing key simply returns True"""
@@ -486,9 +541,14 @@ class TestConsulStorage:
         def mock_delete(url):
             return mock.Mock(status_code=200)
 
-        with mock.patch.object(storage._session, 'delete',
-                               side_effect=mock_delete) as m:
-            deleted = storage.delete('to_delete')
+        def mock_get(url):
+            return mock.Mock(status_code=404)
+
+        with mock.patch.object(storage._session, 'get',
+                               side_effect=mock_get) as m:
+            with mock.patch.object(storage._session, 'delete',
+                                   side_effect=mock_delete) as m:
+                deleted = storage.delete('to_delete')
 
         m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/to_delete')
         assert deleted
@@ -500,12 +560,17 @@ class TestConsulStorage:
         def mock_delete(url):
             return mock.Mock(status_code=404)
 
-        with mock.patch.object(storage._session, 'delete',
-                               side_effect=mock_delete) as m:
-            deleted = storage.delete('to_delete')
+        def mock_get(url):
+            return mock.Mock(status_code=404)
+
+        with mock.patch.object(storage._session, 'get',
+                               side_effect=mock_get) as m:
+            with mock.patch.object(storage._session, 'delete',
+                                   side_effect=mock_delete) as m:
+                deleted = storage.delete('to_delete')
 
         m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/to_delete')
-        assert not deleted
+        assert deleted
 
 
 class HvacClient(object):
@@ -565,7 +630,7 @@ class HvacClient(object):
 
 
 class TestVaultStorage:
-    def test_no_hvac(self):
+    def test_missing_requirement(self):
         with mock.patch('ghost.HVAC_EXISTS', False):
             with pytest.raises(ImportError):
                 ghost.VaultStorage()
@@ -584,33 +649,37 @@ class TestVaultStorage:
     @mock.patch('hvac.Client', HvacClient)
     def test_put_get_delete(self):
         storage = ghost.VaultStorage(token='a')
-        storage.put({'name': 'aws', 'value': {'x': 'y'}})
-        expected_key = {
-            'name': 'aws',
-            'value': {'x': 'y'},
-            'metadata': {'vault_metadata': 'x'}
-        }
-        assert expected_key == storage.get('aws')
-        storage.delete('aws')
-        assert storage.get('aws') == {}
+        key_id = storage.put(BASE_TEST_KEY)
+        storage_tester.put(key_id)
+
+        expected_key = BASE_TEST_KEY.copy()
+        expected_key['metadata'] = {'vault_metadata': 'x'}
+        retrieved_key = storage.get(BASE_TEST_KEY['name'])
+        assert expected_key == retrieved_key
+        storage_tester.get(retrieved_key)
+
+        result = storage.delete(BASE_TEST_KEY['name'])
+        storage_tester.delete(result)
+
+        key = storage.get(BASE_TEST_KEY['name'])
+        storage_tester.get_nonexisting_key(key)
 
     @mock.patch('hvac.Client', HvacClient)
     def test_empty_list(self):
         storage = ghost.VaultStorage(token='a')
-        assert storage.list() == []
+        key_list = storage.list()
+        storage_tester.empty_list(key_list)
 
     @mock.patch('hvac.Client', HvacClient)
     def test_list(self):
         storage = ghost.VaultStorage(token='a')
-        expected_key = {
-            'name': 'aws',
-            'value': {'x': 'y'},
-            'metadata': {'vault_metadata': 'x'}
-        }
-        storage.put({'name': 'aws', 'value': {'x': 'y'}})
+        expected_key = BASE_TEST_KEY.copy()
+        expected_key['metadata'] = {'vault_metadata': 'x'}
+        storage.put(BASE_TEST_KEY)
         key_list = storage.list()
         assert len(key_list) == 1
         assert key_list[0] == expected_key
+        storage_tester.list(key_list)
 
 
 class ESIndices(object):
@@ -693,7 +762,7 @@ class ElasticsearchClient(object):
 
 
 class TestElasticsearchStorage:
-    def test_no_elasticsearch(self):
+    def test_missing_requirement(self):
         with mock.patch('ghost.ES_EXISTS', False):
             with pytest.raises(ImportError):
                 ghost.ElasticsearchStorage()
@@ -708,38 +777,37 @@ class TestElasticsearchStorage:
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_put_get_delete(self):
         storage = ghost.ElasticsearchStorage()
-        storage.put({'name': 'aws', 'value': {'x': 'y'}, 'metadata': {}})
-        expected_key = {
-            'name': 'aws',
-            'value': {'x': 'y'},
-            'metadata': {}
-        }
-        assert expected_key == storage.get('aws')
-        storage.delete('aws')
-        assert storage.get('aws') == {}
+        key_id = storage.put(BASE_TEST_KEY)
+        storage_tester.put(key_id)
+        retrieved_key = storage.get(BASE_TEST_KEY['name'])
+        assert BASE_TEST_KEY == retrieved_key
+        storage_tester.get(retrieved_key)
+
+        result = storage.delete(BASE_TEST_KEY['name'])
+        storage_tester.delete(result)
+
+        key = storage.get(BASE_TEST_KEY['name'])
+        storage_tester.get_nonexisting_key(key)
 
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_delete_non_existing_key(self):
         storage = ghost.ElasticsearchStorage()
-        assert storage.delete('aws') is True
+        assert storage.delete('non_existing_key') is True
 
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_empty_list(self):
         storage = ghost.ElasticsearchStorage()
-        assert storage.list() == []
+        key_list = storage.list()
+        storage_tester.empty_list(key_list)
 
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_list(self):
         storage = ghost.ElasticsearchStorage()
-        expected_key = {
-            'name': 'aws',
-            'value': {'x': 'y'},
-            'metadata': {}
-        }
-        storage.put({'name': 'aws', 'value': {'x': 'y'}, 'metadata': {}})
+        storage.put(BASE_TEST_KEY)
         key_list = storage.list()
         assert len(key_list) == 1
-        assert key_list[0] == expected_key
+        assert key_list[0] == BASE_TEST_KEY
+        storage_tester.list(key_list)
 
 
 @pytest.fixture
@@ -779,10 +847,13 @@ class TestStash:
         assert_stash_initialized(test_stash._storage.db_path)
 
     def test_put(self, test_stash):
-        id = test_stash.put('aws', {'key': 'value'})
+        key_id = test_stash.put('aws', {'key': 'value'})
         db = get_tinydb(test_stash._storage.db_path)
-        db[str(id)]['value'] = test_stash._decrypt(db[str(id)]['value'])
+        db[str(key_id)]['value'] = \
+            test_stash._decrypt(db[str(key_id)]['value'])
         assert_key_put(db)
+
+        storage_tester.put(key_id)
 
     def test_put_no_value_provided(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
@@ -873,6 +944,13 @@ class TestStash:
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.delete('aws')
         assert 'Key aws not found' in str(ex.value)
+
+    def test_delete_failed(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        test_stash._storage.delete = lambda _: False
+        with pytest.raises(ghost.GhostError) as ex:
+            test_stash.delete('aws')
+        assert 'Failed to delete' in str(ex.value)
 
     def test_list(self, test_stash):
         test_stash.put('aws', {'key': 'value'})
