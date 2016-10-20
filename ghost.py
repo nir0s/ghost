@@ -582,7 +582,12 @@ class VaultStorage(object):
         self.path = path
 
     def _key_path(self, key_name):
-        return os.path.join(self.path, key_name)
+        """Return a valid vault path
+
+        Note that we don't use os.path.join as the path is read by vault using
+        slashes even on Windows.
+        """
+        return self.path + '/' + key_name
 
     def init(self):
         """

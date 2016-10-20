@@ -577,7 +577,9 @@ class TestVaultStorage:
 
     def test_key_path(self):
         storage = ghost.VaultStorage(token='a')
-        assert storage._key_path('my_key') == os.path.join('secret', 'my_key')
+        # This might seem like a weird test, but we generally just wanna make
+        # sure that the path always looks like this.
+        assert storage._key_path('my_key') == 'secret/my_key'
 
     @mock.patch('hvac.Client', HvacClient)
     def test_put_get_delete(self):
