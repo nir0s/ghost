@@ -83,17 +83,26 @@ STORAGE_DEFAULT_PATH_MAPPING = {
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
+POTENTIAL_PASSPHRASE_LOCATIONS = [
+    os.path.abspath(PASSPHRASE_FILENAME),
+    os.path.join(GHOST_HOME, PASSPHRASE_FILENAME),
+]
+if not os.name == 'nt':
+    POTENTIAL_PASSPHRASE_LOCATIONS.append(
+        os.path.join(os.sep, 'etc', 'ghost', PASSPHRASE_FILENAME))
 
-def _get_passphrase():
-    potential_passphrase_locations = [
-        os.path.abspath(PASSPHRASE_FILENAME),
-        os.path.join(GHOST_HOME, PASSPHRASE_FILENAME),
-    ]
-    if not os.name == 'nt':
-        potential_passphrase_locations.append(
-            os.path.join(os.sep, 'etc', 'ghost', PASSPHRASE_FILENAME))
 
-    for passphrase_file_path in potential_passphrase_locations:
+def get_passphrase():
+    """Return a passphrase as found in a passphrase.ghost file
+
+    Lookup is done in three locations on non-Windows systems and two on Windows
+    All:
+        `cwd/passphrase.ghost`
+        `~/.ghost/passphrase.ghost`
+    Only non-Windows:
+        `/etc/ghost/passphrase.ghost`
+    """
+    for passphrase_file_path in POTENTIAL_PASSPHRASE_LOCATIONS:
         if os.path.isfile(passphrase_file_path):
             with open(passphrase_file_path) as passphrase_file:
                 return passphrase_file.read()
@@ -888,7 +897,7 @@ def put_key(key_name,
     """
     click.echo('Stashing key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -924,7 +933,7 @@ def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
     if not jsonify:
         click.echo('Retrieving key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     record = stash.get(key_name=key_name, decrypt=not no_decrypt)
@@ -948,7 +957,7 @@ def delete_key(key_name, stash, passphrase, backend):
     """
     click.echo('Deleting key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -972,7 +981,7 @@ def list_keys(jsonify, stash, passphrase, backend):
     if not jsonify:
         click.echo('Listing all keys in {0}...'.format(stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     keys = stash.list()
@@ -998,7 +1007,7 @@ def purge_stash(force, stash, passphrase, backend):
     """
     click.echo('Purging stash {0}...'.format(stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -1022,7 +1031,7 @@ def export_keys(output_path, stash, passphrase, backend):
     """
     click.echo('Exporting stash {0} to {1}...'.format(stash, output_path))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     try:
@@ -1043,7 +1052,7 @@ def load_keys(key_file, stash, passphrase, backend):
     """
     click.echo('Importing all keys from {0} to {1}...'.format(key_file, stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    passphrase = passphrase or _get_passphrase()
+    passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
     stash.load(key_file=key_file)
