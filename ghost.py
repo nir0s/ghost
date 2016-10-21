@@ -677,12 +677,20 @@ def _get_current_time():
     return datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
 
 
-def generate_passphrase(size=12):
+def generate_passphrase(size=12, use_kms=False, kms_cmk=None):
     """Return a generate string `size` long based on lowercase, uppercase,
     and digit chars
     """
-    chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
-    return str(''.join(random.choice(chars) for _ in range(size)))
+    if not use_kms:
+        chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
+        return str(''.join(random.choice(chars) for _ in range(size)))
+    elif not kms_cmk:
+        return get_kms_data_key()
+    raise GhostError('KMS data key requested but no CMK provided')
+
+
+def get_kms_data_key(access_key_id, access_key_secret, cmk_id):
+    raise NotImplementedError
 
 
 class GhostError(Exception):
