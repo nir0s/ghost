@@ -169,6 +169,10 @@ def get_tinydb(path):
 
 class TestStorage(object):
     @staticmethod
+    def is_initialized(structure):
+        assert isinstance(structure, bool)
+
+    @staticmethod
     def put(structure):
         assert isinstance(structure, (str, int))
 
@@ -270,6 +274,14 @@ class TestTinyDBStorage:
         finally:
             os.chdir(prev_dir)
             shutil.rmtree(stash_dir, ignore_errors=True)
+
+    def test_is_initialized(self, stash_path):
+        storage = ghost.TinyDBStorage(stash_path)
+        stash = ghost.Stash(storage)
+        assert storage.is_initialized is False
+        stash.init()
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
 
     def test_put(self, stash_path):
         storage = ghost.TinyDBStorage(stash_path)
@@ -380,13 +392,20 @@ class TestSQLAlchemyStorage:
         stash_path = os.path.join(stash_dir, 'stash.json')
         try:
             storage = ghost.SQLAlchemyStorage(stash_path)
-            stash = ghost.Stash(storage)
             assert os.path.isfile(stash_path) is False
-            stash.init()
+            storage.init()
             assert os.path.isfile(stash_path) is True
         finally:
             os.chdir(prev_dir)
             shutil.rmtree(stash_dir, ignore_errors=True)
+
+    def test_is_initialized(self, stash_path):
+        storage = ghost.SQLAlchemyStorage(stash_path)
+        stash = ghost.Stash(storage)
+        assert storage.is_initialized is False
+        stash.init()
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
 
     def test_put(self, stash_path):
         storage = ghost.SQLAlchemyStorage(stash_path)
@@ -439,6 +458,11 @@ class TestConsulStorage:
         with mock.patch('ghost.REQUESTS_EXISTS', False):
             with pytest.raises(ImportError):
                 ghost.ConsulStorage()
+
+    def test_is_initialized(self):
+        storage = ghost.ConsulStorage()
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
 
     def test_get_400(self):
         """Unhandled errors from consul are turned into a GhostError."""
@@ -646,6 +670,11 @@ class TestVaultStorage:
         # sure that the path always looks like this.
         assert storage._key_path('my_key') == 'secret/my_key'
 
+    def test_is_initialized(self):
+        storage = ghost.VaultStorage(token='a')
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
+
     @mock.patch('hvac.Client', HvacClient)
     def test_put_get_delete(self):
         storage = ghost.VaultStorage(token='a')
@@ -683,6 +712,12 @@ class TestVaultStorage:
 
 
 class ESIndices(object):
+    def __init__(self):
+        self.index_exists = False
+
+    def exists(self, index):
+        return self.index_exists
+
     def create(self, index, ignore):
         """
         {
@@ -701,7 +736,7 @@ class ESIndices(object):
             }
         }
         """
-        return {}
+        self.index_exists = True
 
 
 class ElasticsearchClient(object):
@@ -768,11 +803,14 @@ class TestElasticsearchStorage:
                 ghost.ElasticsearchStorage()
 
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
-    def test_init(self):
+    def test_is_initialized(self):
         storage = ghost.ElasticsearchStorage()
+        assert storage.is_initialized is False
         # Just means that init has been called.
         # We assume that that create function in the es API actually works.
-        assert storage.init() == {}
+        storage.init()
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
 
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_put_get_delete(self):
@@ -1083,11 +1121,18 @@ class TestCLI:
         assert_stash_initialized(test_cli_stash._storage.db_path)
 
     def test_init_already_initialized(self, test_cli_stash):
+        result = _invoke('init_stash "{0}" -p {1}'.format(
+            os.environ['GHOST_STASH_PATH'], test_cli_stash.passphrase))
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'already initialized' in result.output
+
+    def test_init_already_initialized_bad_passphrase(self, test_cli_stash):
         result = _invoke('init_stash "{0}"'.format(
             os.environ['GHOST_STASH_PATH']))
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'already initialized' in result.output
+        assert 'The passphrase provided is invalid' in result.output
 
     def test_put(self, test_cli_stash):
         _invoke('put_key aws key=value')
