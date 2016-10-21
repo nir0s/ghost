@@ -36,7 +36,7 @@ except ImportError:
 import click
 
 from tinydb import TinyDB, Query
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -113,6 +113,14 @@ class Stash(object):
         self._storage = storage
         passphrase = passphrase or generate_passphrase(passphrase_size)
         self.passphrase = passphrase
+
+        if storage.is_initialized:
+            try:
+                self.get('stored_passphrase')
+            except InvalidToken:
+                raise GhostError(
+                    'The passphrase provided is invalid for this stash. '
+                    'Please provide the correct passphrase')
 
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
@@ -348,6 +356,10 @@ class TinyDBStorage(object):
             raise GhostError('Stash {0} already initialized'.format(
                 self.db_path))
 
+    @property
+    def is_initialized(self):
+        return os.path.isfile(self.db_path)
+
     def put(self, key):
         """Insert the key and return its database id
         """
@@ -453,6 +465,10 @@ class SQLAlchemyStorage(object):
         self.metadata.bind = self.db
         self.metadata.create_all()
 
+    @property
+    def is_initialized(self):
+        return os.path.isfile(self._local_path) if self._local_path else True
+
     def put(self, key):
         return self.db.execute(self.keys.insert(), **key).lastrowid
 
@@ -517,12 +533,17 @@ class ConsulStorage(object):
     def init(self):
         """Consul creates directories on the fly, so no init is required."""
 
+    @property
+    def is_initialized(self):
+        """...and therefore, this should always return true
+        """
+        return True
+
     def put(self, key):
         """Put and return the only unique identifier possible, its url
         """
-        return self._consul_request(
-            'PUT', self._key_url(key['name']), json=key)
-        return self._key_url(key['name'])
+        self._consul_request('PUT', self._key_url(key['name']), json=key)
+        return key['name']
 
     def get(self, key_name):
         value = self._consul_request('GET', self._key_url(key_name))
@@ -585,6 +606,10 @@ class VaultStorage(object):
     def init(self):
         """
         """
+
+    @property
+    def is_initialized(self):
+        return True
 
     def put(self, key):
         """Put and return the only unique identifier possible, its path
@@ -654,7 +679,11 @@ class ElasticsearchStorage(object):
         """Create an Elasticsearch index if necessary
         """
         # ignore 400 (IndexAlreadyExistsException) when creating an index
-        return self.es.indices.create(index=self.params['index'], ignore=400)
+        self.es.indices.create(index=self.params['index'], ignore=400)
+
+    @property
+    def is_initialized(self):
+        return self.es.indices.exists(index=self.params['index'])
 
     def put(self, key):
         document = self.es.index(body=key, **self.params)
@@ -855,8 +884,8 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     click.echo('Initializing stash...')
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
-    stash = Stash(storage, passphrase=passphrase)
     try:
+        stash = Stash(storage, passphrase=passphrase)
         passphrase = stash.init()
         with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
             passphrase_file.write(passphrase)
