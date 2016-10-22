@@ -1113,6 +1113,12 @@ def test_cli_stash(stash_path):
 
 
 class TestCLI:
+    @staticmethod
+    def _assert_bad_passphrase(result):
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'The passphrase provided is invalid' in result.output
+
     def test_invoke_main(self):
         result = _invoke('main')
         assert 'Usage: main [OPTIONS] COMMAND [ARGS]' in result.output
@@ -1127,18 +1133,15 @@ class TestCLI:
         assert result.exit_code == 1
         assert 'already initialized' in result.output
 
-    def test_init_already_initialized_bad_passphrase(self, test_cli_stash):
-        result = _invoke('init_stash "{0}"'.format(
-            os.environ['GHOST_STASH_PATH']))
-        assert type(result.exception) == SystemExit
-        assert result.exit_code == 1
-        assert 'The passphrase provided is invalid' in result.output
-
     def test_put(self, test_cli_stash):
         _invoke('put_key aws key=value')
         db = get_tinydb(test_cli_stash._storage.db_path)
         db['2']['value'] = test_cli_stash._decrypt(db['2']['value'])
         assert_key_put(db)
+
+    def test_put_bad_passphrase(self, test_cli_stash):
+        result = _invoke('put_key aws key=value -p {0}'.format('bad'))
+        self._assert_bad_passphrase(result)
 
     def test_put_no_modify(self, test_cli_stash):
         _invoke('put_key aws key=value')
@@ -1156,6 +1159,10 @@ class TestCLI:
         pretty_key_parts = pretty_key.splitlines()
         for part in pretty_key_parts:
             assert part in result.output
+
+    def test_get_bad_passphrase(self, test_cli_stash):
+        result = _invoke('get_key aws -p {0}'.format('bad'))
+        self._assert_bad_passphrase(result)
 
     def test_get_jsonified(self, test_cli_stash):
         _invoke('put_key aws key=value')
@@ -1180,6 +1187,10 @@ class TestCLI:
         assert len(db) == 1
         assert db['1']['name'] == 'stored_passphrase'
 
+    def test_delete_bad_passphrase(self, test_cli_stash):
+        result = _invoke('delete_key aws -p {0}'.format('bad'))
+        self._assert_bad_passphrase(result)
+
     def test_delete_nonexisting_key(self, test_cli_stash):
         result = _invoke('delete_key aws')
         assert type(result.exception) == SystemExit
@@ -1192,6 +1203,10 @@ class TestCLI:
         result = _invoke('list_keys')
         assert '  - aws' in result.output
         assert '  - gcp' in result.output
+
+    def test_list_bad_passphrase(self, test_cli_stash):
+        result = _invoke('list_keys -p {0}'.format('bad'))
+        self._assert_bad_passphrase(result)
 
     def test_list_jsonified(self, test_cli_stash):
         _invoke('put_key aws key=value')

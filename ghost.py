@@ -114,14 +114,6 @@ class Stash(object):
         passphrase = passphrase or generate_passphrase(passphrase_size)
         self.passphrase = passphrase
 
-        if storage.is_initialized:
-            try:
-                self.get('stored_passphrase')
-            except InvalidToken:
-                raise GhostError(
-                    'The passphrase provided is invalid for this stash. '
-                    'Please provide the correct passphrase')
-
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
 
@@ -164,6 +156,8 @@ class Stash(object):
 
         Returns the id of the key in the database
         """
+        self._assert_valid_passphrase()
+
         if value and encrypt and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
         # `existing_key` will be an empty dict if it doesn't exist
@@ -198,6 +192,8 @@ class Stash(object):
     def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
         """
+        self._assert_valid_passphrase()
+
         key = self._storage.get(key_name).copy()
         if not key.get('value'):
             return None
@@ -208,12 +204,16 @@ class Stash(object):
     def list(self):
         """Return a list of all keys.
         """
+        self._assert_valid_passphrase()
+
         return [key['name'] for key in self._storage.list()
                 if key['name'] != 'stored_passphrase']
 
     def delete(self, key_name):
         """Delete a key if it exists.
         """
+        self._assert_valid_passphrase()
+
         if not self.get(key_name):
             raise GhostError('Key {0} not found'.format(key_name))
         deleted = self._storage.delete(key_name)
@@ -223,6 +223,8 @@ class Stash(object):
     def purge(self, force=False):
         """Purge the stash from all keys
         """
+        self._assert_valid_passphrase()
+
         if not force:
             raise GhostError(
                 "The `force` flag must be provided to perform a stash purge. "
@@ -234,6 +236,8 @@ class Stash(object):
     def export(self, output_path=None, decrypt=False):
         """Export all keys in the stash to a list or a file
         """
+        self._assert_valid_passphrase()
+
         all_keys = []
         for key in self.list():
             # We `dict` this as a precaution as tinydb returns
@@ -255,6 +259,8 @@ class Stash(object):
         `stash_path` is a path to a file created by `self.export`
         """
         # TODO: Handle keys not dict or key_file not json
+        self._assert_valid_passphrase()
+
         if not keys and not key_file or (keys and key_file):
             raise GhostError(
                 'You must either provide a path to an exported stash file '
@@ -321,6 +327,17 @@ class Stash(object):
             raise GhostError(
                 "The key doesn't exist and therefore cannot be modified")
         return existing_key
+
+    def _assert_valid_passphrase(self):
+        if self._storage.is_initialized:
+            try:
+                key = self._storage.get('stored_passphrase')
+                if key:
+                    self._decrypt(key['value'])
+            except InvalidToken:
+                raise GhostError(
+                    'The passphrase provided is invalid for this stash. '
+                    'Please provide the correct passphrase')
 
 
 def migrate(src_path,
@@ -973,7 +990,10 @@ def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
-    record = stash.get(key_name=key_name, decrypt=not no_decrypt)
+    try:
+        record = stash.get(key_name=key_name, decrypt=not no_decrypt)
+    except GhostError as ex:
+        sys.exit(ex)
     if not record:
         sys.exit('Key {0} not found'.format(key_name))
     if jsonify:
@@ -1015,13 +1035,16 @@ def delete_key(key_name, stash, passphrase, backend):
 def list_keys(jsonify, stash, passphrase, backend):
     """List all keys in the stash
     """
-    if not jsonify:
-        click.echo('Listing all keys in {0}...'.format(stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    if not jsonify:
+        click.echo('Listing all keys in {0}...'.format(stash_path))
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
-    keys = stash.list()
+    try:
+        keys = stash.list()
+    except GhostError as ex:
+        sys.exit(ex)
     if not keys:
         click.echo('The stash is empty. Go on, put some keys in there...')
     elif jsonify:
@@ -1042,8 +1065,8 @@ def list_keys(jsonify, stash, passphrase, backend):
 def purge_stash(force, stash, passphrase, backend):
     """Purge the stash from all of its keys
     """
-    click.echo('Purging stash {0}...'.format(stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Purging stash {0}...'.format(stash_path))
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1066,8 +1089,8 @@ def purge_stash(force, stash, passphrase, backend):
 def export_keys(output_path, stash, passphrase, backend):
     """Export all keys to a file
     """
-    click.echo('Exporting stash {0} to {1}...'.format(stash, output_path))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Exporting stash {0} to {1}...'.format(stash_path, output_path))
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1087,8 +1110,9 @@ def load_keys(key_file, stash, passphrase, backend):
 
     `KEY_FILE` is the exported stash file to load keys from
     """
-    click.echo('Importing all keys from {0} to {1}...'.format(key_file, stash))
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Importing all keys from {0} to {1}...'.format(
+        key_file, stash_path))
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
