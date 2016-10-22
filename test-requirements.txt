@@ -2,3 +2,6 @@
 .[consul]
 .[sqlalchemy]
 .[elasticsearch]
+.[s3]
+moto==1.0.0
+botocore==1.5.56

@@ -414,6 +414,31 @@ Ironically maybe, you may use Vault as your stash. Since Vault itself encrypts a
 As such, much like with Consul, note that ghost does not provide any complicated configuration options for Vault using the CLI or otherwise. You need to have your Vault[Cluster] preconfigured after-which ghost will store all keys under the `secrets` path (can be overriden). You may provide a key named `aws/account_1`, for instance, in which case ghost will just pass the path along to Vault.
 
 
+### [S3](https://aws.amazon.com/s3/)
+
+
+To enable, run `pip install ghost[s3]`. 
+
+The S3 backend saves keys as JSON encoded objects inside the provided bucket.
+
+#### Requirements
+
+
+- A Stash path must be provided - this is the bucket name to be used. Also, it is necessary to provide a bucket location. If you're using the CLI then you can use
+     ```
+     export GHOST_BUCKET_LOCATION="BUCKET_NAME"
+     ```
+- Also AWS credentials and region name must be provided. If you're using the CLI then you can use 
+    ```
+    export AWS_DEFAULT_REGION="***"
+    export AWS_ACCESS_KEY_ID="***"
+    export AWS_SECRET_ACCESS_KEY="***"
+    OPTIONAL: 
+    export AWS_SESSION_TOKEN="***"
+    export AWS_PROFILE="***"
+    ```
+
+
 ## Encryption & Decryption
 
 Encryption is done using [cryptography](https://cryptography.io/en/latest/). It is done only on values and these are saved in hexa. Keys are left in plain text.

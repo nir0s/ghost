@@ -44,6 +44,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 try:
     from sqlalchemy import (Column,
                             Table,
@@ -74,6 +75,13 @@ try:
     ES_EXISTS = True
 except ImportError:
     ES_EXISTS = False
+
+try:
+    import boto3
+    import botocore
+    S3_EXISTS = True
+except ImportError:
+    S3_EXISTS = False
 
 
 GHOST_HOME = os.path.join(os.path.expanduser('~'), '.ghost')
@@ -973,7 +981,7 @@ class ElasticsearchStorage(object):
             **self.params)
         # The response returned by es.delete actually contains
         # the success status of the request. We're not taking
-        # any chances here but rather verifying that you can't
+        # any chances here but rather verify that you can't
         # get that key anymore.
         return self.get(key_name) == {}
 
@@ -984,6 +992,123 @@ class ElasticsearchStorage(object):
             filter_path=['hits.hits._source', 'hits.hits._id'],
             **self.params)
         return result['hits']['hits'] if result else {}
+
+
+class S3Storage(object):
+    def __init__(self,
+                 db_path,
+                 bucket_location=None or os.environ.get(
+                     'GHOST_BUCKET_LOCATION'),
+                 aws_access_key_id=None or os.environ.get(
+                     'AWS_ACCESS_KEY_ID'),
+                 aws_secret_access_key=None or os.environ.get(
+                     'AWS_SECRET_ACCESS_KEY'),
+                 aws_session_token=None or os.environ.get('AWS_SESSION_TOKEN'),
+                 profile_name=None or os.environ.get('AWS_PROFILE'),
+                 region_name=None or os.environ.get('AWS_DEFAULT_REGION')):
+        """Initializes the storage client
+        :param db_path: The bucket name
+
+        Keyword arguments:
+        bucket_configuration
+        """
+        if not S3_EXISTS:
+            raise ImportError('boto3 and botocore must be installed first')
+
+        self.db_path = db_path
+        if not bucket_location:
+            raise GhostError('No bucket location provided.')
+        self.bucket_configuration = {'LocationConstraint': bucket_location}
+
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token,
+            profile_name=profile_name,
+            region_name=region_name)
+        self.client = session.client('s3')
+
+    def init(self):
+        """Create a bucket.
+        """
+        try:
+            self.client.create_bucket(
+                Bucket=self.db_path,
+                CreateBucketConfiguration=self.bucket_configuration)
+        except botocore.exceptions.ClientError as e:
+            # If the bucket already exists
+            if 'BucketAlreadyOwnedByYou' not in str(
+                    e.response['Error']['Code']):
+                raise e
+
+    def put(self, key):
+        """Insert the key
+        :return: Key name
+        """
+        self.client.put_object(
+            Body=json.dumps(key),
+            Bucket=self.db_path,
+            Key=key['name'])
+        return key['name']
+
+    def list(self):
+        """Lists the keys
+        :return: Returns a list of all keys (not just key names, but rather
+        the keys themselves).
+        """
+        response = self.client.list_objects_v2(Bucket=self.db_path)
+        if u'Contents' in response:
+            # Filter out everything but the key names
+            keys = [key[u'Key'] for key in response[u'Contents']]
+            keys_list = []
+
+            for key_name in keys:
+                key = self.get(key_name)
+                keys_list.append(key)
+
+            return keys_list
+        return []
+
+    def get(self, key_name):
+        """Gets the key.
+        :return: The key itself in a dictionary
+        """
+        try:
+            obj = self.client.get_object(
+                Bucket=self.db_path,
+                Key=key_name)['Body'].read().decode("utf-8")
+
+            return json.loads(obj)
+        except botocore.exceptions.ClientError as e:
+            if 'NoSuchKey' in str(e.response['Error']['Code']):
+                return {}
+            raise e
+
+    def delete(self, key_name):
+        """Delete the key.
+        :return: True if it was deleted, False otherwise
+        """
+        self.client.delete_object(
+            Bucket=self.db_path,
+            Key=key_name)
+
+        return self.get(key_name) == {}
+
+    @property
+    def is_initialized(self):
+        """Check if bucket exists.
+        :return: True if initialized, False otherwise
+        """
+        try:
+            return self.client.head_bucket(
+                Bucket=self.db_path)['ResponseMetadata']['HTTPStatusCode'] \
+                   == 200
+        except botocore.exceptions.ClientError as e:
+            # If a client error is thrown, then check that it was a 404 error.
+            # If it was a 404 error, then the bucket does not exist.
+            if 'NoSuchBucket' in str(e.response['Error']['Code']):
+                return False
+            raise e
 
 
 def _get_current_time():
@@ -1099,7 +1224,8 @@ STORAGE_MAPPING = {
     'sqlalchemy': SQLAlchemyStorage,
     'consul': ConsulStorage,
     'vault': VaultStorage,
-    'elasticsearch': ElasticsearchStorage
+    'elasticsearch': ElasticsearchStorage,
+    's3': S3Storage
 }
 
 
