@@ -1171,6 +1171,30 @@ class TestCLI:
         key['value'] = test_cli_stash._decrypt(key['value'])
         assert json.loads(result.output) == key
 
+    def test_get_single_value(self, test_cli_stash):
+        _invoke('put_key aws key1=value1 key2=value2')
+        # Don't need to pass -j, it should return it bare anyway
+        result = _invoke('get_key aws key2')
+        assert result.output == 'value2'
+        # But if passed, should result in the same output
+        result = _invoke('get_key aws key2 -j')
+        assert result.output == 'value2'
+
+    def test_get_single_nonexisting_value(self, test_cli_stash):
+        _invoke('put_key aws key1=value1 key2=value2')
+        # Don't need to pass -j, it should return it bare anyway
+        result = _invoke('get_key aws key3')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'Value name {0} could not be found'.format('key3') \
+            in result.output
+
+    def test_get_single_value_with_no_decrypt_flag(self):
+        result = _invoke('get_key aws specific_value --no-decrypt')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'VALUE_NAME cannot be used in conjuction' in result.output
+
     def test_get_nonexisting_value(self, test_cli_stash):
         result = _invoke('get_key non-existing-key')
         assert type(result.exception) == SystemExit
