@@ -95,6 +95,10 @@ Modified_At:   2016-09-15 15:10:01
 Value:         access=my_access;secret=my_secret;
 Name:          aws
 
+# Retrieving a single value from the key
+$ ghost get aws secret
+my_secret
+
 # Retrieving a key in machine readable json
 $ ghost get gcp -j
 {

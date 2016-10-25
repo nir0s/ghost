@@ -967,6 +967,7 @@ def put_key(key_name,
 
 @main.command(name='get', short_help='Retrieve a key from the stash')
 @click.argument('KEY_NAME')
+@click.argument('VALUE_NAME', required=False)
 @click.option('-j',
               '--jsonify',
               is_flag=True,
@@ -979,12 +980,25 @@ def put_key(key_name,
 @stash_option
 @passphrase_option
 @backend_option
-def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
+def get_key(key_name,
+            value_name,
+            jsonify,
+            no_decrypt,
+            stash,
+            passphrase,
+            backend):
     """Retrieve a key from the stash
 
+    \b
     `KEY_NAME` is the name of the key to retrieve
+    `VALUE_NAME` is a single value to retrieve e.g. if the value
+     of the key `test` is `a=b,b=c`, `ghost get test a`a will return
+     `b`
     """
-    if not jsonify:
+    if value_name and no_decrypt:
+        sys.exit('VALUE_NAME cannot be used in conjuction with --no-decrypt')
+
+    if not jsonify and not value_name:
         click.echo('Retrieving key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
     passphrase = passphrase or get_passphrase()
@@ -994,10 +1008,18 @@ def get_key(key_name, jsonify, no_decrypt, stash, passphrase, backend):
         record = stash.get(key_name=key_name, decrypt=not no_decrypt)
     except GhostError as ex:
         sys.exit(ex)
+
     if not record:
         sys.exit('Key {0} not found'.format(key_name))
-    if jsonify:
-        click.echo(json.dumps(record, indent=4, sort_keys=False))
+    if value_name:
+        record = record['value'].get(value_name)
+        if not record:
+            sys.exit('Value name {0} could not be found under key {1}'.format(
+                value_name, key_name))
+
+    if jsonify or value_name:
+        click.echo(json.dumps(
+            record, indent=4, sort_keys=False).strip('"'), nl=False)
     else:
         click.echo('\n' + _prettify_dict(record))
 
