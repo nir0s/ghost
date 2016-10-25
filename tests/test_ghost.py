@@ -850,9 +850,13 @@ class TestElasticsearchStorage:
 
 @pytest.fixture
 def test_stash(stash_path):
+    log_dir = tempfile.mkdtemp()
+    ghost.TRANSACTION_LOG_FILE_PATH = \
+        os.path.join(log_dir, 'transaction.log')
     stash = ghost.Stash(ghost.TinyDBStorage(stash_path))
     stash.init()
-    return stash
+    yield stash
+    shutil.rmtree(log_dir, ignore_errors=True)
 
 
 def assert_stash_initialized(stash_path):
@@ -871,8 +875,17 @@ def assert_key_put(db, dont_verify_value=False):
     assert key['metadata'] is None
 
 
+def assert_in_log(message_like):
+    with open(ghost.TRANSACTION_LOG_FILE_PATH) as transaction_log_file:
+        assert message_like in transaction_log_file.read()
+
+
 class TestStash:
     def test_init(self, stash_path):
+        log_dir = tempfile.mkdtemp()
+        ghost.TRANSACTION_LOG_FILE_PATH = \
+            os.path.join(log_dir, 'transaction.log')
+
         storage = ghost.TinyDBStorage(stash_path)
         stash = ghost.Stash(storage, TEST_PASSPHRASE)
         passphrase = stash.init()
@@ -880,6 +893,8 @@ class TestStash:
         assert stash.passphrase == TEST_PASSPHRASE
         assert passphrase == TEST_PASSPHRASE
         assert_stash_initialized(stash_path)
+
+        shutil.rmtree(log_dir, ignore_errors=True)
 
     def test_generated_passphrase(self, test_stash):
         assert_stash_initialized(test_stash._storage.db_path)
@@ -890,7 +905,7 @@ class TestStash:
         db[str(key_id)]['value'] = \
             test_stash._decrypt(db[str(key_id)]['value'])
         assert_key_put(db)
-
+        assert_in_log('PUT')
         storage_tester.put(key_id)
 
     def test_put_no_value_provided(self, test_stash):
@@ -934,6 +949,8 @@ class TestStash:
         assert key['value'] == {'modified_key': 'modified_value'}
         assert key['description'] == 'modified'
 
+        assert_in_log('MODIFY')
+
     def test_put_modify_nonexisting_key(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.put('aws', {'key': 'value'}, modify=True)
@@ -961,6 +978,8 @@ class TestStash:
         key = test_stash.get('aws')
         _test_key(key)
 
+        assert_in_log('GET')
+
     def test_get_nonexisting_key(self, test_stash):
         key = test_stash.get('aws')
         assert key is None
@@ -977,6 +996,8 @@ class TestStash:
         test_stash.delete('aws')
         key = test_stash.get('aws')
         assert key is None
+
+        assert_in_log('DELETE')
 
     def test_delete_nonexisting_key(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
@@ -997,6 +1018,8 @@ class TestStash:
         assert key_list[0] == 'aws'
         assert 'stored_passphrase' not in key_list
 
+        assert_in_log('LIST')
+
     def test_empty_list(self, test_stash):
         key_list = test_stash.list()
         assert len(key_list) == 0
@@ -1010,6 +1033,8 @@ class TestStash:
         assert len(key_list) == 0
         stored_passphrase_key = test_stash.get('stored_passphrase')
         assert stored_passphrase_key is not None
+
+        assert_in_log('PURGE')
 
     def test_purge_no_force(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
@@ -1095,6 +1120,9 @@ def _create_migration_env(test_stash, temp_file_path):
 
 @pytest.fixture
 def test_cli_stash(stash_path):
+    log_dir = tempfile.mkdtemp()
+    ghost.TRANSACTION_LOG_FILE_PATH = \
+        os.path.join(log_dir, 'transaction.log')
     fd, passphrase_file_path = tempfile.mkstemp()
     os.close(fd)
     ghost.PASSPHRASE_FILENAME = passphrase_file_path
@@ -1108,6 +1136,7 @@ def test_cli_stash(stash_path):
     try:
         os.remove(passphrase_file_path)
         os.remove(stash_path)
+        shutil.rmtree(log_dir, ignore_errors=True)
     except:
         pass
 

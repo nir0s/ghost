@@ -267,6 +267,30 @@ Values are encrypted once provided and decrypted only upon request, meaning that
 
 See cryptography's [documentation](https://cryptography.io/en/latest/) for additional information.
 
+## Transaction log
+
+A transaction log is saved under `~/.ghost/transaction.log` containing a log of all primary actions (`put`, `get`, `delete`, `purge`, `list`) done on any stash. The path can be set using the `GHOST_TRANSACTION_LOG` env var.
+
+The log file itself is not machine readable. Whether it will be remains to be seen.
+
+The log should look somewhat like this:
+
+```
+2016-10-25 15:23:24,441 - [/home/nir0s/.ghost/stash.json] [LIST]
+2016-10-25 15:23:31,350 - [/home/nir0s/.ghost/stash.json] [PUT] - {"key_name": "aws", "metadata": "null", "description": null, "value": "HIDDEN", "uid": "19fde800-89b9-4c25-a0af-b790e118bab7"}
+2016-10-25 15:23:34,954 - [/home/nir0s/.ghost/stash.json] [LIST]
+2016-10-25 15:24:33,322 - [/home/nir0s/.ghost/stash.json] [GET] - {"key_name": "aws"}
+2016-10-25 15:24:33,323 - [/home/nir0s/.ghost/stash.json] [DELETE] - {"key_name": "aws"}
+2016-10-25 15:24:33,323 - [/home/nir0s/.ghost/stash.json] [DELETE] - {"key_name": "aws"}
+2016-10-25 15:24:49,890 - [/home/nir0s/.ghost/stash.json] [PUT] - {"key_name": "aws", "metadata": "null", "description": null, "value": "HIDDEN", "uid": "ffa4fb66-e3c0-445c-bafc-a60f480dc45a"}
+2016-10-25 15:24:52,230 - [/home/nir0s/.ghost/stash.json] [PUT] - {"key_name": "gcp", "metadata": "null", "description": null, "value": "HIDDEN", "uid": "567f891a-d097-4575-a472-4409dc459a9a"}
+2016-10-25 15:24:55,625 - [/home/nir0s/.ghost/stash.json] [PUT] - {"key_name": "gfa", "metadata": "null", "description": null, "value": "HIDDEN", "uid": "434b197b-c82e-41b1-a4d2-eaeb7cd6cf72"}
+2016-10-25 15:25:00,553 - [/home/nir0s/.ghost/stash.json] [LIST]
+2016-10-25 15:25:08,413 - [/home/nir0s/.ghost/stash.json] [GET] - {"key_name": "aws"}
+2016-10-25 15:25:08,414 - [/home/nir0s/.ghost/stash.json] [DELETE] - {"key_name": "aws"}
+2016-10-25 15:25:08,414 - [/home/nir0s/.ghost/stash.json] [DELETE] - {"key_name": "aws"}
+2016-10-25 15:25:16,416 - [/home/nir0s/.ghost/stash.json] [PURGE] - all keys
+```
 
 ## Exporting and Importing
 
