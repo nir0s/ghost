@@ -24,6 +24,7 @@ import uuid
 import base64
 import random
 import string
+import logging
 import binascii
 import warnings
 from datetime import datetime
@@ -80,6 +81,9 @@ STORAGE_DEFAULT_PATH_MAPPING = {
     'elasticsearch': 'http://127.0.0.1:9200'
 }
 
+TRANSACTION_LOG_FILE_PATH = os.environ.get(
+    'GHOST_TRANSACTION_LOG', os.path.join(GHOST_HOME, 'transaction.log'))
+
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
 POTENTIAL_PASSPHRASE_LOCATIONS = [
@@ -89,6 +93,17 @@ POTENTIAL_PASSPHRASE_LOCATIONS = [
 if not os.name == 'nt':
     POTENTIAL_PASSPHRASE_LOCATIONS.append(
         os.path.join(os.sep, 'etc', 'ghost', PASSPHRASE_FILENAME))
+
+
+# Transaction logger
+def get_logger():
+    handler = logging.FileHandler(TRANSACTION_LOG_FILE_PATH)
+    formatter = logging.Formatter('%(asctime)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(__file__)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def get_passphrase():
@@ -118,6 +133,11 @@ class Stash(object):
     _key = None
 
     def init(self):
+        # For the transaction log
+        if not os.path.isdir(GHOST_HOME):
+            os.makedirs(GHOST_HOME)
+
+        # raise Exception(TRANSACTION_LOG_FILE_PATH)
         self._storage.init()
         self.put(
             name='stored_passphrase',
@@ -180,7 +200,7 @@ class Stash(object):
         description = description or existing_key.get('description')
         metadata = metadata or existing_key.get('metadata')
 
-        return self._storage.put(dict(
+        key_id = self._storage.put(dict(
             name=name,
             value=value,
             description=description,
@@ -188,6 +208,16 @@ class Stash(object):
             modified_at=modified_at,
             metadata=metadata,
             uid=uid))
+        get_logger().info(
+            '[{0}] [{1}] - {2}'.format(
+                self._storage.db_path, 'MODIFY' if modify else 'PUT',
+                json.dumps(dict(
+                    key_name=name,
+                    value='HIDDEN',
+                    description=description,
+                    uid=uid,
+                    metadata=json.dumps(metadata)))))
+        return key_id
 
     def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
@@ -199,6 +229,9 @@ class Stash(object):
             return None
         if decrypt:
             key['value'] = self._decrypt(key['value'])
+
+        get_logger().info('[{0}] [GET] - {1}'.format(
+            self._storage.db_path, json.dumps(dict(key_name=key_name))))
         return key
 
     def list(self):
@@ -206,8 +239,10 @@ class Stash(object):
         """
         self._assert_valid_passphrase()
 
-        return [key['name'] for key in self._storage.list()
-                if key['name'] != 'stored_passphrase']
+        key_list = [key['name'] for key in self._storage.list()
+                    if key['name'] != 'stored_passphrase']
+        get_logger().info('[{0}] [LIST]'.format(self._storage.db_path))
+        return key_list
 
     def delete(self, key_name):
         """Delete a key if it exists.
@@ -217,6 +252,8 @@ class Stash(object):
         if not self.get(key_name):
             raise GhostError('Key {0} not found'.format(key_name))
         deleted = self._storage.delete(key_name)
+        get_logger().info('[{0}] [DELETE] - {1}'.format(
+            self._storage.db_path, json.dumps(dict(key_name=key_name))))
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
 
@@ -230,6 +267,7 @@ class Stash(object):
                 "The `force` flag must be provided to perform a stash purge. "
                 "I mean, you don't really want to just delete everything "
                 "without precautionary measures eh?")
+        get_logger().info('[{0}] [PURGE]'.format(self._storage.db_path))
         for key_name in self.list():
             self.delete(key_name)
 
