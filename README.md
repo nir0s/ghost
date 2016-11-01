@@ -7,8 +7,8 @@ ghost - shhhhhh
 [![Supported Python Versions](https://img.shields.io/pypi/pyversions/ghost.svg)](https://img.shields.io/pypi/pyversions/ghost.svg)
 [![Requirements Status](https://requires.io/github/nir0s/ghost/requirements.svg?branch=master)](https://requires.io/github/nir0s/ghost/requirements/?branch=master)
 [![Code Coverage](https://codecov.io/github/nir0s/ghost/coverage.svg?branch=master)](https://codecov.io/github/nir0s/ghost?branch=master)
+[![Code Quality](https://landscape.io/github/nir0s/ghost/master/landscape.svg?style=flat)](https://landscape.io/github/nir0s/ghost)
 [![Is Wheel](https://img.shields.io/pypi/wheel/ghost.svg?style=flat)](https://pypi.python.org/pypi/ghost)
-[![Latest Github Release](https://img.shields.io/github/release/nir0s/ghost.svg)](https://img.shields.io/github/release/nir0s/ghost.svg)
 
 ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends without requiring a server to run.
 

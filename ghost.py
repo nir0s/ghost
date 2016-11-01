@@ -209,14 +209,14 @@ class Stash(object):
             metadata=metadata,
             uid=uid))
         get_logger().info(
-            '[{0}] [{1}] - {2}'.format(
-                self._storage.db_path, 'MODIFY' if modify else 'PUT',
-                json.dumps(dict(
-                    key_name=name,
-                    value='HIDDEN',
-                    description=description,
-                    uid=uid,
-                    metadata=json.dumps(metadata)))))
+            '[%s] [%s] - %s',
+            self._storage.db_path, 'MODIFY' if modify else 'PUT',
+            json.dumps(dict(
+                key_name=name,
+                value='HIDDEN',
+                description=description,
+                uid=uid,
+                metadata=json.dumps(metadata))))
         return key_id
 
     def get(self, key_name, decrypt=True):
@@ -230,8 +230,9 @@ class Stash(object):
         if decrypt:
             key['value'] = self._decrypt(key['value'])
 
-        get_logger().info('[{0}] [GET] - {1}'.format(
-            self._storage.db_path, json.dumps(dict(key_name=key_name))))
+        get_logger().info(
+            '[%s] [GET] - %s',
+            self._storage.db_path, json.dumps(dict(key_name=key_name)))
         return key
 
     def list(self):
@@ -241,7 +242,7 @@ class Stash(object):
 
         key_list = [key['name'] for key in self._storage.list()
                     if key['name'] != 'stored_passphrase']
-        get_logger().info('[{0}] [LIST]'.format(self._storage.db_path))
+        get_logger().info('[%s] [LIST]', self._storage.db_path)
         return key_list
 
     def delete(self, key_name):
@@ -252,8 +253,9 @@ class Stash(object):
         if not self.get(key_name):
             raise GhostError('Key {0} not found'.format(key_name))
         deleted = self._storage.delete(key_name)
-        get_logger().info('[{0}] [DELETE] - {1}'.format(
-            self._storage.db_path, json.dumps(dict(key_name=key_name))))
+        get_logger().info(
+            '[%s] [DELETE] - %s',
+            self._storage.db_path, json.dumps(dict(key_name=key_name)))
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
 
@@ -267,7 +269,7 @@ class Stash(object):
                 "The `force` flag must be provided to perform a stash purge. "
                 "I mean, you don't really want to just delete everything "
                 "without precautionary measures eh?")
-        get_logger().info('[{0}] [PURGE]'.format(self._storage.db_path))
+        get_logger().info('[%s] [PURGE]', self._storage.db_path)
         for key_name in self.list():
             self.delete(key_name)
 
@@ -904,8 +906,7 @@ backend_option = click.option(
     default='tinydb',
     type=click.Choice(STORAGE_MAPPING.keys()),
     help='Storage backend for the stash (Can be set via the '
-    '`GHOST_BACKEND_TYPE` env var)'.format(
-        STORAGE_MAPPING.keys()))
+    '`GHOST_BACKEND_TYPE` env var)')
 
 
 @main.command(name='init', short_help='Init a stash')
@@ -920,8 +921,7 @@ backend_option = click.option(
               '--backend',
               default='tinydb',
               type=click.Choice(STORAGE_MAPPING.keys()),
-              help='Storage backend for the stash'.format(
-                  STORAGE_MAPPING.keys()))
+              help='Storage backend for the stash')
 def init_stash(stash_path, passphrase, passphrase_size, backend):
     r"""Init a stash
 
@@ -940,7 +940,10 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     try:
-        stash = Stash(storage, passphrase=passphrase)
+        stash = Stash(
+            storage,
+            passphrase=passphrase,
+            passphrase_size=passphrase_size)
         passphrase = stash.init()
         with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
             passphrase_file.write(passphrase)
@@ -1190,8 +1193,7 @@ def load_keys(key_file, stash, passphrase, backend):
 @click.option('-sb',
               '--source-backend',
               type=click.Choice(STORAGE_MAPPING.keys()),
-              help='Storage backend for the stash'.format(
-                  STORAGE_MAPPING.keys()))
+              help='Storage backend for the stash')
 @click.option('-dp',
               '--destination-passphrase',
               default=None,
@@ -1200,8 +1202,7 @@ def load_keys(key_file, stash, passphrase, backend):
 @click.option('-db',
               '--destination-backend',
               type=click.Choice(STORAGE_MAPPING.keys()),
-              help='Storage backend for the stash'.format(
-                  STORAGE_MAPPING.keys()))
+              help='Storage backend for the stash')
 def migrate_stash(source_stash_path,
                   source_passphrase,
                   source_backend,
