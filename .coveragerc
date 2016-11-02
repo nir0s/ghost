@@ -1,0 +1,14 @@
+[run]
+branch = True
+source =
+    ghost.py
+
+[paths]
+source =
+   ghost.py
+   .tox/*/lib/python*/site-packages/ghost.py
+   .tox/pypy/site-packages/ghost.py
+
+[report]
+exclude_lines =
+    except ImportError:
