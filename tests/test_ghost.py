@@ -1121,6 +1121,8 @@ def _create_migration_env(test_stash, temp_file_path):
 @pytest.fixture
 def test_cli_stash(stash_path):
     log_dir = tempfile.mkdtemp()
+    ghost.GHOST_HOME = tempfile.mkdtemp()
+    shutil.rmtree(ghost.GHOST_HOME, ignore_errors=True)
     ghost.TRANSACTION_LOG_FILE_PATH = \
         os.path.join(log_dir, 'transaction.log')
     fd, passphrase_file_path = tempfile.mkstemp()
@@ -1137,6 +1139,7 @@ def test_cli_stash(stash_path):
         os.remove(passphrase_file_path)
         os.remove(stash_path)
         shutil.rmtree(log_dir, ignore_errors=True)
+        shutil.rmtree(ghost.GHOST_HOME, ignore_errors=True)
     except:
         pass
 
