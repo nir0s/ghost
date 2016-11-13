@@ -1,4 +1,4 @@
-ghost - shhhhhh
+ghost (shhhhhh)
 ===============
 
 [![Travis Build Status](https://travis-ci.org/nir0s/ghost.svg?branch=master)](https://travis-ci.org/nir0s/ghost)
@@ -12,15 +12,22 @@ ghost - shhhhhh
 
 ghost aims to provide a secret-store with a single, simple-to-use API supporting multiple storage backends without requiring a server to run.
 
+To that end, ghost supports file based backends like TinyDB and SQLite. Using other backends means, of course, that they need to be available to ghost, while ghost itself remains stateless.
+
+Currently, ghost supports authenticating only via a passphrase. Authenticating via KMS, GitHub and the likes, might be supported in the future.
+
+
 ## Alternatives
 
 * While [Vault](http://vaultproject.io) is truly spectacular and I've been using it for quite a while now, it requires a server running.
-* [Credstash](https://github.com/fugue/credstash) is only AWS KMS based. 
-* [Keywhiz](https://github.com/square/keywhiz), like vault, also requires a server.. and let's face it, I ain't gonna run Java on my laptop just for that thank you.
-* [Unicreds](https://github.com/Versent/unicreds) is based on credstash and, again, only supports KMS.
-* [Sops](https://github.com/mozilla/sops) is complicated to use and also is KMS based. 
+* [Credstash](https://github.com/fugue/credstash) is only AWS KMS + DDB based. 
+* [Keywhiz](https://github.com/square/keywhiz), like vault, also requires a server.. and let's face it, I ain't gonna run a JVM on my laptop just for that thank you.
+* [Unicreds](https://github.com/Versent/unicreds) is based on credstash and, again, only supports KMS + DDB.
+* [Sops](https://github.com/mozilla/sops) is complicated to use and also is KMS+DDB based. 
 * There's a new project called [sstash](https://github.com/realcr/sstash), but it only supports file based encryption and is not intuitive enough as I see it. 
 * Google developed something called [Keyczar](https://github.com/google/keyczar), but it doesn't seem to be under development.
+* Pinterest has a seemingly interesting project called [Knox](https://github.com/pinterest/knox). Knox required a server to be running and doesn't support multiple backends. It also seems more developer oriented than anything else.
+* Lyft has a really nice solution called [Confidant](https://lyft.github.io/confidant/) which also has a nice UI to go along with it. It authenticates via KMS and stores keys in DDB and requires and server to be running.
 
 
 ## Installation
