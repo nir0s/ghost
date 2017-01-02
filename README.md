@@ -170,15 +170,15 @@ NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlche
 import ghost
 
 # Initialize a new stash
-storage = TinyDBStorage(db_path='/home/nir0s/.ghost/stash.json')
+storage = ghost.TinyDBStorage(db_path='/home/nir0s/.ghost/stash.json')
 # Can also generate a passphrase via `ghost.generate_passphrase(size=20)`
-stash = Stash(storage, passphrase='P!3pimp5i31')
+stash = ghost.Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
 
 # Insert a key
-stash.put(key='aws', value={'secret': 'my_secret', access: 'my_access'})
+stash.put(name='aws', value={'secret': 'my_secret', 'access': 'my_access'})
 # Get the key
-key = stash.get(key='aws')
+key = stash.get(key_name='aws')
 print(key)
 ...
 
