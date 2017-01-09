@@ -32,7 +32,7 @@ Currently, ghost supports authenticating only via a passphrase. Authenticating v
 
 ## Installation
 
-Ghost supports Linux, Windows and OSX on Python 2.6, 2.7 and 3.4+
+Ghost supports Linux, Windows and OSX on Python 2.6, 2.7 and 3.3+
 
 ```shell
 pip install ghost
