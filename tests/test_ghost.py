@@ -127,7 +127,7 @@ class TestGeneral:
                 assert ghost.get_passphrase() == passphrase
             finally:
                 os.remove(passphrase_file_path)
-
+        assert passphrase is ghost.get_passphrase(passphrase)
 
 def _create_temp_file():
     fd, temp_file = tempfile.mkstemp()
