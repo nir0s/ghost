@@ -129,6 +129,7 @@ class TestGeneral:
                 os.remove(passphrase_file_path)
         assert passphrase is ghost.get_passphrase(passphrase)
 
+
 def _create_temp_file():
     fd, temp_file = tempfile.mkstemp()
     os.close(fd)
@@ -237,10 +238,7 @@ class TestTinyDBStorage:
         os.close(fd)
         try:
             storage = ghost.TinyDBStorage(stash_path)
-            with pytest.raises(ghost.GhostError) as ex:
-                storage.init()
-            assert 'Stash {0} already initialized'.format(stash_path) \
-                in str(ex.value)
+            storage.init()
         finally:
             os.remove(stash_path)
 
@@ -354,10 +352,7 @@ class TestSQLAlchemyStorage:
         fd, stash_path = tempfile.mkstemp()
         os.close(fd)
         storage = ghost.SQLAlchemyStorage('sqlite:///' + stash_path)
-        with pytest.raises(ghost.GhostError) as ex:
-            storage.init()
-        assert 'Stash {0} already initialized'.format(stash_path) \
-            in str(ex.value)
+        storage.init()
         try:
             os.remove(stash_path)
         except:
@@ -1161,9 +1156,16 @@ class TestCLI:
     def test_init_already_initialized(self, test_cli_stash):
         result = _invoke('init_stash "{0}" -p {1}'.format(
             os.environ['GHOST_STASH_PATH'], test_cli_stash.passphrase))
+        assert 'Stash already initialized' in result.output
+        assert result.exit_code == 0
+
+    @pytest.mark.skipif(os.name == 'nt', reason='Irrelevant on Windows')
+    def test_init_permission_denied(self, test_cli_stash):
+        result = _invoke('init_stash "{0}" -p {1}'.format(
+            '/x', test_cli_stash.passphrase))
+        assert 'Permission denied' in str(result.exception)
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'already initialized' in result.output
 
     def test_put(self, test_cli_stash):
         _invoke('put_key aws key=value')
@@ -1246,6 +1248,12 @@ class TestCLI:
     def test_delete_bad_passphrase(self, test_cli_stash):
         result = _invoke('delete_key aws -p {0}'.format('bad'))
         self._assert_bad_passphrase(result)
+
+    def test_delete_stored_passphrase(self, test_cli_stash):
+        result = _invoke('delete_key stored_passphrase')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert '`stored_passphrase` is a reserved' in result.output
 
     def test_delete_nonexisting_key(self, test_cli_stash):
         result = _invoke('delete_key aws')

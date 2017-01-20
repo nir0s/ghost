@@ -137,12 +137,22 @@ class Stash(object):
         if not os.path.isdir(GHOST_HOME):
             os.makedirs(GHOST_HOME)
 
-        # raise Exception(TRANSACTION_LOG_FILE_PATH)
+        if self.is_initialized:
+            return
+
         self._storage.init()
         self.put(
             name='stored_passphrase',
             value={'passphrase': self.passphrase})
         return self.passphrase
+
+    @property
+    def is_initialized(self):
+        if self._storage.is_initialized:
+            self.passphrase = get_passphrase(self.passphrase)
+            if self.get('stored_passphrase'):
+                return True
+        return False
 
     def put(self,
             name,
@@ -249,6 +259,11 @@ class Stash(object):
         """Delete a key if it exists.
         """
         self._assert_valid_passphrase()
+
+        if key_name == 'stored_passphrase':
+            raise GhostError(
+                '`stored_passphrase` is a reserved ghost key name '
+                'which cannot be deleted')
 
         if not self.get(key_name):
             raise GhostError('Key {0} not found'.format(key_name))
@@ -409,9 +424,6 @@ class TinyDBStorage(object):
         dirname = os.path.dirname(self.db_path)
         if dirname and not os.path.isdir(dirname):
             os.makedirs(os.path.dirname(self.db_path))
-        elif os.path.isfile(self.db_path):
-            raise GhostError('Stash {0} already initialized'.format(
-                self.db_path))
 
     @property
     def is_initialized(self):
@@ -513,9 +525,6 @@ class SQLAlchemyStorage(object):
             dirname = os.path.dirname(self._local_path)
             if dirname and not os.path.isdir(dirname):
                 os.makedirs(dirname)
-            elif os.path.isfile(self._local_path):
-                raise GhostError('Stash {0} already initialized'.format(
-                    self._local_path))
 
         # More on connection strings for sqlalchemy:
         # http://docs.sqlalchemy.org/en/latest/core/engines.html
@@ -936,19 +945,27 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
 
     export GHOST_PASSPHRASE=$(cat passphrase.ghost)
     """
-    click.echo('Initializing stash...')
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+    click.echo('Initializing stash...')
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
+
     try:
         stash = Stash(
             storage,
             passphrase=passphrase,
             passphrase_size=passphrase_size)
         passphrase = stash.init()
+
+        if not passphrase:
+            click.echo('Stash already initialized.')
+            sys.exit(0)
+
         with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
             passphrase_file.write(passphrase)
-    except (GhostError, OSError) as ex:
+    except (GhostError, IOError) as ex:
         sys.exit(ex)
+
     click.echo('Initialized stash at: {0}'.format(stash_path))
     click.echo(
         'Your passphrase can be found under the `{0}` file in the '
@@ -990,8 +1007,9 @@ def put_key(key_name,
     `VALUE` is a key=value argument which can be provided multiple times.
     it is the encrypted value of your key
     """
-    click.echo('Stashing key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+    click.echo('Stashing key...')
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1039,9 +1057,10 @@ def get_key(key_name,
     if value_name and no_decrypt:
         sys.exit('VALUE_NAME cannot be used in conjuction with --no-decrypt')
 
-    if not jsonify and not value_name:
-        click.echo('Retrieving key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    if not jsonify and not value_name:
+        click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+        click.echo('Retrieving key...')
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1075,8 +1094,9 @@ def delete_key(key_name, stash, passphrase, backend):
 
     `KEY_NAME` is the name of the key to delete
     """
-    click.echo('Deleting key...')
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+    click.echo('Deleting key...')
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1100,7 +1120,8 @@ def list_keys(jsonify, stash, passphrase, backend):
     """
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
     if not jsonify:
-        click.echo('Listing all keys in {0}...'.format(stash_path))
+        click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+        click.echo('Listing all keys...')
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
@@ -1129,7 +1150,8 @@ def purge_stash(force, stash, passphrase, backend):
     """Purge the stash from all of its keys
     """
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Purging stash {0}...'.format(stash_path))
+    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+    click.echo('Purging stash...')
     passphrase = passphrase or get_passphrase()
     storage = STORAGE_MAPPING[backend](db_path=stash_path)
     stash = Stash(storage, passphrase=passphrase)
