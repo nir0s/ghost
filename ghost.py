@@ -106,6 +106,11 @@ def get_logger():
     return logger
 
 
+def audit(storage, action, message):
+    logger = get_logger()
+    logger.info('[%s] [%s] - %s', storage, action, message)
+
+
 def get_passphrase(passphrase=None):
     """Return a passphrase as found in a passphrase.ghost file
 
@@ -218,15 +223,17 @@ class Stash(object):
             modified_at=modified_at,
             metadata=metadata,
             uid=uid))
-        get_logger().info(
-            '[%s] [%s] - %s',
-            self._storage.db_path, 'MODIFY' if modify else 'PUT',
-            json.dumps(dict(
+
+        audit(
+            storage=self._storage.db_path,
+            action='MODIFY' if modify else 'PUT',
+            message=json.dumps(dict(
                 key_name=name,
                 value='HIDDEN',
                 description=description,
                 uid=uid,
                 metadata=json.dumps(metadata))))
+
         return key_id
 
     def get(self, key_name, decrypt=True):
@@ -240,9 +247,11 @@ class Stash(object):
         if decrypt:
             key['value'] = self._decrypt(key['value'])
 
-        get_logger().info(
-            '[%s] [GET] - %s',
-            self._storage.db_path, json.dumps(dict(key_name=key_name)))
+        audit(
+            storage=self._storage.db_path,
+            action='GET',
+            message=json.dumps(dict(key_name=key_name)))
+
         return key
 
     def list(self):
@@ -252,7 +261,12 @@ class Stash(object):
 
         key_list = [key['name'] for key in self._storage.list()
                     if key['name'] != 'stored_passphrase']
-        get_logger().info('[%s] [LIST]', self._storage.db_path)
+
+        audit(
+            storage=self._storage.db_path,
+            action='LIST',
+            message=json.dumps(dict()))
+
         return key_list
 
     def delete(self, key_name):
@@ -268,9 +282,12 @@ class Stash(object):
         if not self.get(key_name):
             raise GhostError('Key {0} not found'.format(key_name))
         deleted = self._storage.delete(key_name)
-        get_logger().info(
-            '[%s] [DELETE] - %s',
-            self._storage.db_path, json.dumps(dict(key_name=key_name)))
+
+        audit(
+            storage=self._storage.db_path,
+            action='DELETE',
+            message=json.dumps(dict(key_name=key_name)))
+
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
 
@@ -284,7 +301,12 @@ class Stash(object):
                 "The `force` flag must be provided to perform a stash purge. "
                 "I mean, you don't really want to just delete everything "
                 "without precautionary measures eh?")
-        get_logger().info('[%s] [PURGE]', self._storage.db_path)
+
+        audit(
+            storage=self._storage.db_path,
+            action='PURGE',
+            message=json.dumps(dict()))
+
         for key_name in self.list():
             self.delete(key_name)
 
