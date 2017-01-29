@@ -1209,10 +1209,10 @@ class TestCLI:
         _invoke('put_key aws key1=value1 key2=value2')
         # Don't need to pass -j, it should return it bare anyway
         result = _invoke('get_key aws key2')
-        assert result.output == 'value2'
+        assert result.output == 'value2\n'
         # But if passed, should result in the same output
         result = _invoke('get_key aws key2 -j')
-        assert result.output == 'value2'
+        assert result.output == 'value2\n'
 
     def test_get_single_nonexisting_value(self, test_cli_stash):
         _invoke('put_key aws key1=value1 key2=value2')

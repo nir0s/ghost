@@ -1100,8 +1100,9 @@ def get_key(key_name,
                 value_name, key_name))
 
     if jsonify or value_name:
-        click.echo(json.dumps(
-            record, indent=4, sort_keys=False).strip('"'), nl=False)
+        click.echo(
+            json.dumps(record, indent=4, sort_keys=False).strip('"'),
+            nl=True)
     else:
         click.echo('\n' + _prettify_dict(record))
 
