@@ -1,7 +1,25 @@
+**0.5.0 (2017-02-07)
+
+* Use default stash path for tinydb when using the CLI so that it is no longer a required option
+* Add automatic reading of `passphrase.ghost` from different locations (cwd/..., ~/.ghost/... and /etc/ghost/...)
+* Allow to `get` a single value from a key (e.g. ghost get aws SECRET_ACCESS_KEY)
+* Validate passphrase before any action, not only read
+* Add file-based transation log for auditing purposes
+* Make `init` idempotent on all storage backends
+* Disallow deleting the built in `passphrase` key
+* Fix vault path using backslackes instead of slashes on Windows
+* Output new line when retrieving key using CLI
+* Greatly simplify storage testing framework to allow adding storages much easily
+* Improve code quality
+
+
 **0.4.1 (2016-10-11)
+
 * Fix any remaining Windows related issues and fix the tests. Windows support is now official.
 
+
 **0.4.0 (2016-10-11)
+
 * Add a Vault backend
 * Add an Elasticsearch backend
 * Add a Consul backend (Thanks tehasdf!)
@@ -13,6 +31,7 @@
 * Use appdirs to provide the default dir for ghost's home (Thanks jcollado!)
 * Fix not being able to `stash.get(key)` twice using the API.
 * Fix not being able to create a stash in the `cwd` when using a file based backend like TinyDB or SQLite
+
 
 **0.3.0 (2016-09-25)**
 
@@ -29,6 +48,7 @@
 * Add `-j` flag to jsonify key list.
 * Remove `T` from the timestamp in the `modified_at` and `created_at` fields of a key.
 
+
 **0.2.0 (2016-09-18)**
 
 * Replace simple-crypt with cryptography for a faster and more common encryption engine.
@@ -38,6 +58,7 @@
 * Allow to retrieve a value via `stash.get_value(key=key)`
 * Raise an error if a stash is initialized twice in the same path
 * Change the `--val` flag to `--value`. `--val` is just weird.
+
 
 **0.1.4 (2016-09-15)**
 
