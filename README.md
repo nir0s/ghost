@@ -160,8 +160,6 @@ The stash is empty. Go on, put some keys in there...
 ...
 ```
 
-NOTE: `--passphrase` and `--stash` can be supplied via the `GHOST_STASH_PATH` and `GHOST_PASSPHRASE` env vars.
-
 NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlchemy backend, you must either provide the `--stash` and `--backend` flags with every command or set the `GHOST_STASH_PATH` and `GHOST_BACKEND` env vars after having initialized the stash. Not providing the stash path and the backend will result in ghost failing misrebly.
 
 ### Directly from Python

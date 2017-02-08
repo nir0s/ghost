@@ -165,7 +165,7 @@ def temp_file_path():
 
 def get_tinydb(path):
     with open(path) as db:
-        return json.loads(db.read())['_default']
+        return json.loads(db.read())['ghost']
 
 
 class TestStorage(object):
@@ -336,7 +336,7 @@ class TestSQLAlchemyStorage:
             engine = create_engine(storage.db_path)
             inspector = inspect(engine)
             tables = inspector.get_table_names()
-            assert 'keys' in tables
+            assert 'ghost' in tables
             columns = [c['name'] for c in inspector.get_columns(tables[0])]
             assert 'description' in columns
             assert 'uid' in columns
@@ -508,7 +508,7 @@ class TestConsulStorage:
 
     def test_list(self):
         """Listing keys returns the whole stored objects."""
-        storage = ghost.ConsulStorage(directory='foo/bar')
+        storage = ghost.ConsulStorage(stash_name='ghost')
         original_key = {'secret': 42, 'name': 'baz'}
 
         def mock_get(url):
@@ -516,7 +516,7 @@ class TestConsulStorage:
             resp.status_code = 200
             json_bytes = json.dumps(original_key).encode('utf-8')
             resp.json.return_value = [
-                {'Value': base64.b64encode(json_bytes), 'Key': 'foo/bar/baz'}
+                {'Value': base64.b64encode(json_bytes), 'Key': 'ghost/baz'}
             ]
             return resp
 
@@ -524,7 +524,7 @@ class TestConsulStorage:
                                side_effect=mock_get) as m:
             retrieved_keys = storage.list()
 
-        m.assert_called_with('http://127.0.0.1:8500/v1/kv/foo/bar/?recurse')
+        m.assert_called_with('http://127.0.0.1:8500/v1/kv/ghost/?recurse')
         assert retrieved_keys == [original_key]
 
     def test_put(self):
@@ -596,7 +596,7 @@ class HvacClient(object):
     def __init__(self, url, token=None, cert=None):
         self.store = {}
 
-    def list(self, path='secret'):
+    def list(self, path='ghost'):
         """
         {
             'lease_id': '',
@@ -663,7 +663,7 @@ class TestVaultStorage:
         storage = ghost.VaultStorage(token='a')
         # This might seem like a weird test, but we generally just wanna make
         # sure that the path always looks like this.
-        assert storage._key_path('my_key') == 'secret/my_key'
+        assert storage._key_path('my_key') == 'secret/ghost/my_key'
 
     def test_is_initialized(self):
         storage = ghost.VaultStorage(token='a')
@@ -1358,3 +1358,19 @@ class TestCLI:
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'There are no keys to export' in result.output
+
+
+class TestMultiStash:
+    def test_parse_stash_path_string(self):
+        stash_path = '/etc/my-stash.json;stash1'
+        assert ghost._parse_path_string(stash_path) == {
+            'db_path': '/etc/my-stash.json',
+            'stash_name': 'stash1'
+        }
+
+    def test_parse_stash_path_string_no_stash_name(self):
+        stash_path = '/etc/my-stash.json'
+        assert ghost._parse_path_string(stash_path) == {
+            'db_path': '/etc/my-stash.json',
+            'stash_name': 'ghost'
+        }
