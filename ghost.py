@@ -438,9 +438,12 @@ def migrate(src_path,
 
 
 class TinyDBStorage(object):
-    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['tinydb']):
+    def __init__(self,
+                 db_path=STORAGE_DEFAULT_PATH_MAPPING['tinydb'],
+                 stash_name='ghost'):
         self.db_path = os.path.expanduser(db_path)
         self._db = None
+        self._stash_name = stash_name
 
     def init(self):
         dirname = os.path.dirname(self.db_path)
@@ -512,11 +515,13 @@ class TinyDBStorage(object):
                 indent=4,
                 sort_keys=True,
                 separators=(',', ': '))
-        return self._db
+        return self._db.table(self._stash_name)
 
 
 class SQLAlchemyStorage(object):
-    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['sqlalchemy']):
+    def __init__(self,
+                 db_path=STORAGE_DEFAULT_PATH_MAPPING['sqlalchemy'],
+                 stash_name='ghost'):
         if not SQLALCHEMY_EXISTS:
             raise ImportError('SQLAlchemy must be installed first')
         if 'sqlite' in db_path:
@@ -531,7 +536,7 @@ class SQLAlchemyStorage(object):
 
         self.metadata = MetaData()
         self.keys = Table(
-            'keys',
+            stash_name,
             self.metadata,
             Column('name', String, primary_key=True),
             Column('value', PickleType),
@@ -606,13 +611,13 @@ class SQLAlchemyStorage(object):
 class ConsulStorage(object):
     def __init__(self,
                  db_path=STORAGE_DEFAULT_PATH_MAPPING['consul'],
-                 directory='ghost',
+                 stash_name='ghost',
                  verify=True,
                  client_cert=None,
                  auth=None):
         if not REQUESTS_EXISTS:
             raise ImportError('Requests must be installed first')
-        self._url = urljoin(db_path, 'v1/kv/{0}/'.format(directory))
+        self._url = urljoin(db_path, 'v1/kv/{0}/'.format(stash_name))
         self._session = requests.Session()
         self._session.verify = verify
         self._session.cert = client_cert
@@ -678,7 +683,7 @@ class VaultStorage(object):
                  db_path=STORAGE_DEFAULT_PATH_MAPPING['vault'],
                  token=None or os.environ.get('VAULT_TOKEN'),
                  cert=None,
-                 path='secret'):
+                 stash_name='ghost'):
 
         if not HVAC_EXISTS:
             raise ImportError('hvac must be installed first')
@@ -689,7 +694,7 @@ class VaultStorage(object):
                 'type')
 
         self.client = hvac.Client(url=db_path, token=token, cert=cert)
-        self.path = path
+        self._stash_name = stash_name
 
     def init(self):
         """
@@ -712,7 +717,7 @@ class VaultStorage(object):
         return self._convert_vault_record_to_ghost_record(vault_record)
 
     def list(self):
-        keys = self.client.list(self.path)
+        keys = self.client.list(self._stash_name)
         if not keys:
             return []
         keys = keys['data']['keys']
@@ -731,7 +736,7 @@ class VaultStorage(object):
         Note that we don't use os.path.join as the path is read by vault using
         slashes even on Windows.
         """
-        return self.path + '/' + key_name
+        return 'secret/' + self._stash_name + '/' + key_name
 
     @staticmethod
     def _convert_vault_record_to_ghost_record(vault_record):
@@ -745,7 +750,7 @@ class VaultStorage(object):
 class ElasticsearchStorage(object):
     def __init__(self,
                  db_path=STORAGE_DEFAULT_PATH_MAPPING['elasticsearch'],
-                 index='ghost',
+                 stash_name='ghost',
                  use_ssl=False,
                  verify_certs=False,
                  ca_certs='',
@@ -761,7 +766,7 @@ class ElasticsearchStorage(object):
             ca_certs=ca_certs,
             client_cert=client_cert,
             client_key=client_key)
-        self.params = dict(index=index, doc_type='doc')
+        self.params = dict(index=stash_name, doc_type='doc')
 
     def init(self):
         """Create an Elasticsearch index if necessary
@@ -894,6 +899,14 @@ def _prettify_list(items):
     return keys_list
 
 
+def _parse_path_string(stash_path):
+    stash_parts = stash_path.rsplit(';', 1)
+    return dict(
+        db_path=stash_parts[0],
+        stash_name=stash_parts[1] if len(stash_parts) == 2 else 'ghost'
+    )
+
+
 CLICK_CONTEXT_SETTINGS = dict(
     help_option_names=['-h', '--help'],
     token_normalize_func=lambda param: param.lower())
@@ -921,8 +934,9 @@ stash_option = click.option(
     '--stash',
     envvar='GHOST_STASH_PATH',
     type=click.STRING,
-    help='Path to the stash (Can be set via the `GHOST_STASH_PATH` '
-    'env var)')
+    help='Path to the storage (Can be set via the `GHOST_STASH_PATH` '
+    'env var). You can also provide a stash name (defaults to ghost) '
+    'by providing a name after the colon (e.g. http://...:8500;stash1)')
 passphrase_option = click.option(
     '-p',
     '--passphrase',
@@ -956,21 +970,25 @@ backend_option = click.option(
 def init_stash(stash_path, passphrase, passphrase_size, backend):
     r"""Init a stash
 
-    `STASH_PATH` is the path to the stash. If this isn't supplied,
-    a default path will be used.
+    `STASH_PATH` is the path to the storage endpoint. If this isn't supplied,
+    a default path will be used. In the path, you can specify a name
+    for the stash (which, if omitted, will default to `ghost`) like so:
+    `ghost init http://10.10.1.1:8500;stash1`.
 
     After initializing a stash, don't forget you can set environment
     variables for both your stash's path and its passphrase.
     On Linux/OSx you can run:
 
-    export GHOST_STASH_PATH='MY_PATH'
+    export GHOST_STASH_PATH='http://10.10.1.1:8500;stash1'
 
     export GHOST_PASSPHRASE=$(cat passphrase.ghost)
+
+    export GHOST_BACKEND='tinydb'
     """
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
     click.echo('Initializing stash...')
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
 
     try:
         stash = Stash(
@@ -1033,7 +1051,7 @@ def put_key(key_name,
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
     click.echo('Stashing key...')
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.put(
@@ -1084,7 +1102,7 @@ def get_key(key_name,
         click.echo('Stash: {0} at {1}'.format(backend, stash_path))
         click.echo('Retrieving key...')
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         record = stash.get(key_name=key_name, decrypt=not no_decrypt)
@@ -1121,7 +1139,7 @@ def delete_key(key_name, stash, passphrase, backend):
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
     click.echo('Deleting key...')
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.delete(key_name=key_name)
@@ -1146,7 +1164,7 @@ def list_keys(jsonify, stash, passphrase, backend):
         click.echo('Stash: {0} at {1}'.format(backend, stash_path))
         click.echo('Listing all keys...')
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         keys = stash.list()
@@ -1176,7 +1194,7 @@ def purge_stash(force, stash, passphrase, backend):
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
     click.echo('Purging stash...')
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.purge(force)
@@ -1200,7 +1218,7 @@ def export_keys(output_path, stash, passphrase, backend):
     stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
     click.echo('Exporting stash {0} to {1}...'.format(stash_path, output_path))
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     try:
         stash.export(output_path=output_path)
@@ -1222,7 +1240,7 @@ def load_keys(key_file, stash, passphrase, backend):
     click.echo('Importing all keys from {0} to {1}...'.format(
         key_file, stash_path))
     passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](db_path=stash_path)
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
     stash = Stash(storage, passphrase=passphrase)
     stash.load(key_file=key_file)
 
