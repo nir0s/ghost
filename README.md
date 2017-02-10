@@ -168,7 +168,9 @@ NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlche
 import ghost
 
 # Initialize a new stash
-storage = ghost.TinyDBStorage(db_path='/home/nir0s/.ghost/stash.json')
+storage = ghost.TinyDBStorage(
+    db_path='/home/nir0s/.ghost/stash.json',
+    stash_name='ghost')
 # Can also generate a passphrase via `ghost.generate_passphrase(size=20)`
 stash = ghost.Stash(storage, passphrase='P!3pimp5i31')
 stash.init()
@@ -186,6 +188,20 @@ stash.list()
 # Delete a key
 stash.delete('aws')
 ```
+
+## Working with multiple stashes
+
+By default, ghost generates a default stash named "ghost", regardless of the storage backend you're using. Each backend supports working with multiple stashes (or otherwise, "tenants"). This allows users to distinguish between environments, for example.
+
+To initialize a named stash:
+
+```shell
+ghost init http://internal-es:9200[stash-name] --backend elasticsearch
+```
+
+You can initialize as many stashes as you want, as long, of course, as each storage backend's endpoint has a unique name for each of its stashes.
+
+
 
 ## Passphrase file generation and discovery
 

@@ -429,8 +429,8 @@ def migrate(src_path,
     stash's passphrase and then encrypt them based on the destination
     stash's passphrase.
     """
-    src_storage = STORAGE_MAPPING[src_backend](db_path=src_path)
-    dst_storage = STORAGE_MAPPING[dst_backend](db_path=dst_path)
+    src_storage = STORAGE_MAPPING[src_backend](**_parse_path_string(src_path))
+    dst_storage = STORAGE_MAPPING[dst_backend](**_parse_path_string(dst_path))
     src_stash = Stash(src_storage, src_passphrase)
     dst_stash = Stash(dst_storage, dst_passphrase)
     keys = src_stash.export(decrypt=True)
@@ -900,10 +900,13 @@ def _prettify_list(items):
 
 
 def _parse_path_string(stash_path):
-    stash_parts = stash_path.rsplit(';', 1)
+    stash_parts = stash_path.rsplit('[', 1)
+    stash_name = stash_parts[1].rstrip(']') if len(stash_parts) == 2 \
+        else 'ghost'
+    stash_name = stash_name or 'ghost'
     return dict(
         db_path=stash_parts[0],
-        stash_name=stash_parts[1] if len(stash_parts) == 2 else 'ghost'
+        stash_name=stash_name
     )
 
 

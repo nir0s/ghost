@@ -1361,8 +1361,10 @@ class TestCLI:
 
 
 class TestMultiStash:
+    # TODO: Test that migrate works when using multi-stash mode
+    # TODO: Test that all CLI commands work when using multi-stash mode
     def test_parse_stash_path_string(self):
-        stash_path = '/etc/my-stash.json;stash1'
+        stash_path = '/etc/my-stash.json[stash1]'
         assert ghost._parse_path_string(stash_path) == {
             'db_path': '/etc/my-stash.json',
             'stash_name': 'stash1'
@@ -1370,6 +1372,13 @@ class TestMultiStash:
 
     def test_parse_stash_path_string_no_stash_name(self):
         stash_path = '/etc/my-stash.json'
+        assert ghost._parse_path_string(stash_path) == {
+            'db_path': '/etc/my-stash.json',
+            'stash_name': 'ghost'
+        }
+
+    def test_parse_stash_path_string_no_stash_name_in_brackets(self):
+        stash_path = '/etc/my-stash.json[]'
         assert ghost._parse_path_string(stash_path) == {
             'db_path': '/etc/my-stash.json',
             'stash_name': 'ghost'
