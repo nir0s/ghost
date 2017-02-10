@@ -846,8 +846,8 @@ class TestElasticsearchStorage:
 @pytest.fixture
 def test_stash(stash_path):
     log_dir = tempfile.mkdtemp()
-    ghost.TRANSACTION_LOG_FILE_PATH = \
-        os.path.join(log_dir, 'transaction.log')
+    ghost.AUDIT_LOG_FILE_PATH = \
+        os.path.join(log_dir, 'audit.log')
     stash = ghost.Stash(ghost.TinyDBStorage(stash_path))
     stash.init()
     yield stash
@@ -871,15 +871,15 @@ def assert_key_put(db, dont_verify_value=False):
 
 
 def assert_in_log(message_like):
-    with open(ghost.TRANSACTION_LOG_FILE_PATH) as transaction_log_file:
-        assert message_like in transaction_log_file.read()
+    with open(ghost.AUDIT_LOG_FILE_PATH) as audit_log_file:
+        assert message_like in audit_log_file.read()
 
 
 class TestStash:
     def test_init(self, stash_path):
         log_dir = tempfile.mkdtemp()
-        ghost.TRANSACTION_LOG_FILE_PATH = \
-            os.path.join(log_dir, 'transaction.log')
+        ghost.AUDIT_LOG_FILE_PATH = \
+            os.path.join(log_dir, 'audit.log')
 
         storage = ghost.TinyDBStorage(stash_path)
         stash = ghost.Stash(storage, TEST_PASSPHRASE)
@@ -1118,8 +1118,8 @@ def test_cli_stash(stash_path):
     log_dir = tempfile.mkdtemp()
     ghost.GHOST_HOME = tempfile.mkdtemp()
     shutil.rmtree(ghost.GHOST_HOME, ignore_errors=True)
-    ghost.TRANSACTION_LOG_FILE_PATH = \
-        os.path.join(log_dir, 'transaction.log')
+    ghost.AUDIT_LOG_FILE_PATH = \
+        os.path.join(log_dir, 'audit.log')
     fd, passphrase_file_path = tempfile.mkstemp()
     os.close(fd)
     ghost.PASSPHRASE_FILENAME = passphrase_file_path
