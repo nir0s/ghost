@@ -1122,11 +1122,13 @@ def test_cli_stash(stash_path):
         os.path.join(log_dir, 'transaction.log')
     fd, passphrase_file_path = tempfile.mkstemp()
     os.close(fd)
+    os.remove(passphrase_file_path)
     ghost.PASSPHRASE_FILENAME = passphrase_file_path
     _invoke('init_stash "{0}"'.format(stash_path))
     os.environ['GHOST_STASH_PATH'] = stash_path
     with open(passphrase_file_path) as passphrase_file:
         passphrase = passphrase_file.read()
+    os.remove(passphrase_file_path)
     os.environ['GHOST_PASSPHRASE'] = passphrase
     os.environ['GHOST_BACKEND_TYPE'] = 'tinydb'
     yield ghost.Stash(ghost.TinyDBStorage(stash_path), passphrase)
@@ -1326,6 +1328,16 @@ class TestCLI:
         _invoke('load_keys "{0}"'.format(temp_file_path))
         result = _invoke('list_keys -j')
         assert json.loads(result.output) == key_list
+
+    def test_fail_init_two_stashes_passphrase_file_exists(self,
+                                                          stash_path,
+                                                          temp_file_path):
+        _invoke('init_stash "{0}"'.format(stash_path))
+        result = _invoke('init_stash "{0}" -b sqlalchemy'.format(
+            temp_file_path))
+
+        assert 'Overwriting might prevent you' in result.output
+        assert result.exit_code == 1
 
     def test_migrate(self, test_stash, temp_file_path):
         migration_params, destination_stash = _create_migration_env(
