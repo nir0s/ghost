@@ -44,11 +44,12 @@ For dev:
 pip install https://github.com/nir0s/ghost/archive/master.tar.gz
 ```
 
+
 ## Usage
 
 ### CLI
 
-```bash
+```shell
 $ ghost
 Usage: ghost [OPTIONS] COMMAND [ARGS]...
 
@@ -189,6 +190,7 @@ stash.list()
 stash.delete('aws')
 ```
 
+
 ## Working with multiple stashes
 
 By default, ghost generates a default stash named "ghost", regardless of the storage backend you're using. Each backend supports working with multiple stashes (or otherwise, "tenants"). This allows users to distinguish between environments, for example.
@@ -196,19 +198,45 @@ By default, ghost generates a default stash named "ghost", regardless of the sto
 To initialize a named stash:
 
 ```shell
-ghost init http://internal-es:9200[stash-name] --backend elasticsearch
+$ ghost init http://internal-es:9200[stash-name] --backend elasticsearch
 ```
 
 You can initialize as many stashes as you want, as long, of course, as each storage backend's endpoint has a unique name for each of its stashes.
 
+
+## Locking and Unlocking keys
+
+Sometimes, you might want to lock a key to make sure it isn't deleted or modified accidentally. 
+
+NOTE: Purging a stash will also delete locked keys.
+
+To that end, ghost allows you to lock a key:
+
+```shell
+$ ghost lock my_key
+Locking key...
+$ ghost delete my_key
+Deleting key...
+Key `my_key` is locked and therefore cannot be deleted Please unlock the key and try again
+...
+
+$ ghost unlock my_key
+...
+
+```
+
+
+## Purging a stash
+
+To allow for extreme measures when necessary, ghost provides the `purge` API (and command). If you quickly need to delete all keys from a stash, you can use it. To purge a stash you'll have to provide a mandatory `force` flag as precautionary measure.
 
 
 ## Passphrase file generation and discovery
 
 When initializing a stash, ghost generates a passphrase file containing either the passphrase you explicitly provide or an auto-generated one. The file is saved under `cwd/passphrase.ghost`. After having been generated, you can read the file into an environment variable to use it like so:
 
-```bash
-export GHOST_PASSPHRASE=$(cat passphrase.ghost)
+```shell
+$ export GHOST_PASSPHRASE=$(cat passphrase.ghost)
 ```
 
 To simplify UX when using the CLI, ghost discovers the `passphrase.ghost` file generated when initializing the a stash and uses it unless told otherwise.
@@ -222,6 +250,7 @@ unless the `--passphrase` flag or `GHOST_PASSPHRASE` env var are set, ghost will
 The Python API requires passing the passphrase explicitly to the Stash class when generating its instance.
 
 It is important to note that if you regularly use two storage backends, you might not want to use the auto-discovery mechanism at all as to not accidently try to use one key with a mismatching stash.
+
 
 ## Backends
 
@@ -288,6 +317,7 @@ Values are encrypted once provided and decrypted only upon request, meaning that
 
 See cryptography's [documentation](https://cryptography.io/en/latest/) for additional information.
 
+
 ## Audit log
 
 NOTE: This is WIP. The audit log is currently kept on the machine where ghost is run. As such, it is hardly useful for auditing purposes when using a remote backend. As ghost evoles, it will offer remote auditing. 
@@ -325,7 +355,7 @@ So, for instance, if you have a local implementation using sqlite, you could exp
 
 The `migrate` command will allow you to easily migrate all of your keys from one backend to another like so:
 
-```bash
+```shell
 ghost migrate my_stash.json postgresql://localhost/ghost \
   --source-passphrase 123 \
   --destination-passphrase 321 \
@@ -353,6 +383,7 @@ stash = Stash(storage, passphrase='SAME_PASSPHRASE')
 decrypted_value = stash._decrypt(encrypted_value_from_file)
 ```
 
+
 ## Testing
 
 ```shell
@@ -361,6 +392,7 @@ cd ghost
 pip install tox
 tox
 ```
+
 
 ## Contributions..
 

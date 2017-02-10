@@ -891,6 +891,11 @@ class TestStash:
 
         shutil.rmtree(log_dir, ignore_errors=True)
 
+    def test_broken_is_initialized(self, test_cli_stash):
+        assert test_cli_stash.is_initialized is True
+        test_cli_stash._storage.delete('stored_passphrase')
+        assert test_cli_stash.is_initialized is False
+
     def test_generated_passphrase(self, test_stash):
         assert_stash_initialized(test_stash._storage.db_path)
 
@@ -997,7 +1002,7 @@ class TestStash:
     def test_delete_nonexisting_key(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.delete('aws')
-        assert 'Key aws not found' in str(ex.value)
+        assert 'Key `aws` not found' in str(ex.value)
 
     def test_delete_failed(self, test_stash):
         test_stash.put('aws', {'key': 'value'})
@@ -1089,6 +1094,19 @@ class TestStash:
         assert 'aws' in destination_stash.list()
         assert 'gcp' in destination_stash.list()
         assert 'openstack' in destination_stash.list()
+
+    # TODO: Test lock here also
+    def test_lock_an_already_locked_key(self, test_stash):
+        test_stash.put('aws', {'key': 'value'}, lock=True)
+        assert test_stash.is_locked('aws') is True
+        test_stash.lock('aws')
+        assert test_stash.is_locked('aws') is True
+
+    def test_unlock_an_already_unlocked_key(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        assert test_stash.is_locked('aws') is False
+        test_stash.unlock('aws')
+        assert test_stash.is_locked('aws') is False
 
 
 def _create_migration_env(test_stash, temp_file_path):
@@ -1184,7 +1202,15 @@ class TestCLI:
         result = _invoke('put_key aws key=value')
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'The key already exists' in result.output
+        assert 'Key `aws` already exists' in result.output
+
+    def test_modify_locked(self, test_cli_stash):
+        _invoke('put_key aws key=value --lock')
+        result = _invoke('put_key aws key=other_value --modify')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'Key `aws` is locked' in result.output
+        result = _invoke('get_key aws key').output == 'value'
 
     def test_get(self, test_cli_stash):
         _invoke('put_key aws key=value')
@@ -1222,8 +1248,7 @@ class TestCLI:
         result = _invoke('get_key aws key3')
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'Value name {0} could not be found'.format('key3') \
-            in result.output
+        assert 'Value name `key3` could not be found' in result.output
 
     def test_get_single_value_with_no_decrypt_flag(self):
         result = _invoke('get_key aws specific_value --no-decrypt')
@@ -1235,7 +1260,7 @@ class TestCLI:
         result = _invoke('get_key non-existing-key')
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'Key non-existing-key not found' in result.output
+        assert 'Key `non-existing-key` not found' in result.output
 
     def test_delete_key(self, test_cli_stash):
         _invoke('put_key aws key=value')
@@ -1261,13 +1286,23 @@ class TestCLI:
         result = _invoke('delete_key aws')
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
-        assert 'Key aws not found' in result.output
+        assert 'Key `aws` not found' in result.output
 
     def test_list(self, test_cli_stash):
         _invoke('put_key aws key=value')
         _invoke('put_key gcp key=value')
         result = _invoke('list_keys')
         assert '  - aws' in result.output
+        assert '  - gcp' in result.output
+
+    def test_list_locked_only(self, test_cli_stash):
+        _invoke('put_key aws key=value')
+        _invoke('put_key gcp key=value --lock')
+        result = _invoke('list_keys')
+        assert '  - aws' in result.output
+        assert '  - gcp' in result.output
+        result = _invoke('list_keys --locked')
+        assert '  - aws' not in result.output
         assert '  - gcp' in result.output
 
     def test_list_bad_passphrase(self, test_cli_stash):
@@ -1324,7 +1359,7 @@ class TestCLI:
         _invoke('export_keys -o "{0}"'.format(temp_file_path))
         _invoke('purge_stash -f')
         result = _invoke('list_keys -j')
-        assert 'The stash is empty' in result.output
+        assert json.loads(result.output.strip('\n')) == []
         _invoke('load_keys "{0}"'.format(temp_file_path))
         result = _invoke('list_keys -j')
         assert json.loads(result.output) == key_list
@@ -1346,10 +1381,11 @@ class TestCLI:
             'migrate_stash "{src_path}" "{dst_path}" '
             '-sp {src_passphrase} -dp {dst_passphrase} '
             '-sb {src_backend} -db {dst_backend}'.format(**migration_params))
-        assert len(destination_stash.list()) == 3
-        assert 'aws' in destination_stash.list()
-        assert 'gcp' in destination_stash.list()
-        assert 'openstack' in destination_stash.list()
+        current_keys = destination_stash.list()
+        assert len(current_keys) == 3
+        assert 'aws' in current_keys
+        assert 'gcp' in current_keys
+        assert 'openstack' in current_keys
 
     def test_fail_migrate(self, test_stash, temp_file_path):
         migration_params, destination_stash = _create_migration_env(
@@ -1370,6 +1406,38 @@ class TestCLI:
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'There are no keys to export' in result.output
+
+    def test_lock(self, test_cli_stash):
+        _invoke('put_key aws key=value')
+        assert 'aws' in json.loads(_invoke('list_keys -j').output)
+
+        _invoke('lock_key aws')
+        result = _invoke('delete_key aws')
+        assert 'Key `aws` is locked' in result.output
+        assert 'aws' in json.loads(_invoke('list_keys -j').output)
+        _invoke('unlock_key aws')
+        _invoke('delete_key aws')
+        assert 'aws' not in _invoke('list_keys -j').output
+
+    def test_lock_by_put(self, test_cli_stash):
+        _invoke('put_key aws key=value --lock')
+        result = _invoke('delete_key aws')
+        assert 'Key `aws` is locked' in result.output
+        assert 'aws' in json.loads(_invoke('list_keys -j').output)
+
+    def test_lock_non_existing_key(self, test_cli_stash):
+        assert 'aws' not in json.loads(_invoke('list_keys -j').output)
+        result = _invoke('lock_key aws')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'Key `aws` not found' in result.output
+
+    def test_unlock_non_existing_key(self, test_cli_stash):
+        assert 'aws' not in json.loads(_invoke('list_keys -j').output)
+        result = _invoke('unlock_key aws')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'Key `aws` not found' in result.output
 
 
 class TestMultiStash:
