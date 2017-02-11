@@ -994,6 +994,13 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
 
     try:
+        if os.path.isfile(PASSPHRASE_FILENAME):
+            sys.exit(
+                '{0} already exists. Overwriting might prevent you '
+                'from accessing the stash it was generated for. '
+                'Please make sure to save and remove the file before '
+                'initializing another stash.'.format(PASSPHRASE_FILENAME))
+
         stash = Stash(
             storage,
             passphrase=passphrase,
