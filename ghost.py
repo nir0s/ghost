@@ -428,13 +428,18 @@ def migrate(src_path,
     The migration process will decrypt all keys using the source
     stash's passphrase and then encrypt them based on the destination
     stash's passphrase.
+
+    re-encryption will take place only if the passphrases are differing
     """
     src_storage = STORAGE_MAPPING[src_backend](**_parse_path_string(src_path))
     dst_storage = STORAGE_MAPPING[dst_backend](**_parse_path_string(dst_path))
     src_stash = Stash(src_storage, src_passphrase)
     dst_stash = Stash(dst_storage, dst_passphrase)
-    keys = src_stash.export(decrypt=True)
-    dst_stash.load(keys=keys, encrypt=True)
+    # TODO: Test that re-encryption does not occur on similiar
+    # passphrases
+    similiar_passphrase = src_passphrase == dst_passphrase
+    keys = src_stash.export(decrypt=not similiar_passphrase)
+    dst_stash.load(keys=keys, encrypt=not similiar_passphrase)
 
 
 class TinyDBStorage(object):
