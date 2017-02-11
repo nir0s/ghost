@@ -81,8 +81,8 @@ STORAGE_DEFAULT_PATH_MAPPING = {
     'elasticsearch': 'http://127.0.0.1:9200'
 }
 
-TRANSACTION_LOG_FILE_PATH = os.environ.get(
-    'GHOST_TRANSACTION_LOG', os.path.join(GHOST_HOME, 'transaction.log'))
+AUDIT_LOG_FILE_PATH = os.environ.get(
+    'GHOST_AUDIT_LOG', os.path.join(GHOST_HOME, 'audit.log'))
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
@@ -95,9 +95,9 @@ if not os.name == 'nt':
         os.path.join(os.sep, 'etc', 'ghost', PASSPHRASE_FILENAME))
 
 
-# Transaction logger
+# audit logger
 def get_logger():
-    handler = logging.FileHandler(TRANSACTION_LOG_FILE_PATH)
+    handler = logging.FileHandler(AUDIT_LOG_FILE_PATH)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     handler.setFormatter(formatter)
     logger = logging.getLogger(__file__)
@@ -138,7 +138,7 @@ class Stash(object):
     _key = None
 
     def init(self):
-        # For the transaction log
+        # For the audit log
         if not os.path.isdir(GHOST_HOME):
             os.makedirs(GHOST_HOME)
 

@@ -288,9 +288,11 @@ Values are encrypted once provided and decrypted only upon request, meaning that
 
 See cryptography's [documentation](https://cryptography.io/en/latest/) for additional information.
 
-## Transaction log
+## Audit log
 
-A transaction log is saved under `~/.ghost/transaction.log` containing a log of all primary actions (`put`, `get`, `delete`, `purge`, `list`) done on any stash. The path can be set using the `GHOST_TRANSACTION_LOG` env var.
+NOTE: This is WIP. The audit log is currently kept on the machine where ghost is run. As such, it is hardly useful for auditing purposes when using a remote backend. As ghost evoles, it will offer remote auditing. 
+
+An audit log is saved under `~/.ghost/audit.log` containing a log of all primary actions (`put`, `get`, `delete`, `purge`, `list`) done on any stash. The path can be set using the `GHOST_AUDIT_LOG` env var.
 
 The log file itself is not machine readable. Whether it will be remains to be seen.
 
