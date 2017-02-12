@@ -79,15 +79,15 @@ class TestGeneral:
             uid='b',
             created_at='c',
             metadata={'x': 'y'},
-            modified='e',
+            modified_at='e',
             value={'key': 'value'},
             name='g')
         prettified_input = ghost._prettify_dict(input).splitlines()
         assert 'Description:   a' in prettified_input
         assert 'Uid:           b' in prettified_input
-        assert 'Created_At:    c' in prettified_input
+        assert 'Created At:    c' in prettified_input
         assert 'Metadata:      x=y;' in prettified_input
-        assert 'Modified:      e' in prettified_input
+        assert 'Modified At:   e' in prettified_input
         assert 'Value:         key=value;' in prettified_input
         assert 'Name:          g' in prettified_input
 

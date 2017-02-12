@@ -164,6 +164,26 @@ $ ghost list
 Listing all keys in /home/nir0s/.ghost/stash.json...
 The stash is empty. Go on, put some keys in there...
 ...
+
+# Showing general stash info
+$ ghost show ~/path/to/my/stash[main] -j
+Stash: tinydb at ...
+{
+    "stash_name": "main", 
+    "modified_at": null, 
+    "created_at": "2017-03-21 09:13:58", 
+    "key_count": {
+        "secret": 7, 
+        "unlocked": 10, 
+        "locked": 3, 
+        "ssh": 6, 
+        "all": 13
+    },
+    "type": "TinyDBStorage", 
+    "stash_path": "..."
+}
+...
+
 ```
 
 NOTE: The default backend for the CLI is TinyDB. If you want to use the SQLAlchemy backend, you must either provide the `--stash` and `--backend` flags with every command or set the `GHOST_STASH_PATH` and `GHOST_BACKEND` env vars after having initialized the stash. Not providing the stash path and the backend will result in ghost failing misrebly.
@@ -193,6 +213,8 @@ stash.list()
 
 # Delete a key
 stash.delete('aws')
+...
+
 ```
 
 

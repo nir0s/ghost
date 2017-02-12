@@ -167,11 +167,16 @@ class Stash(object):
         if self.is_initialized:
             return
 
+        date = _get_current_time()
         self._storage.init()
         self.put(
             name='stored_passphrase',
             value={'passphrase': self.passphrase},
             lock=True)
+        self.put(
+            name='_last_modified_at',
+            value={'value': date},
+            lock=False)
         return self.passphrase
 
     @property
@@ -307,6 +312,7 @@ class Stash(object):
                 lock=new_key['lock'],
                 type=new_key['type'])))
 
+        self._update_modification_date(new_key['modified_at'])
         return key_id
 
     def _update_existing_key(self, existing_key, value):
@@ -350,34 +356,56 @@ class Stash(object):
 
         return key
 
+    @staticmethod
+    def _filter_by_type(key_list, key_type):
+        # raise Exception(key_list)
+        # To maintain backward compatibility with keys without a type.
+        # The default key type is secret, in which case we also look for
+        # keys with no (None) types.
+        types = ('secret', None) if key_type == 'secret' else [key_type]
+        key_list = [k for k in key_list if k.get('type') in types]
+        return key_list
+
+    @staticmethod
+    def _filter_close_matches(key_list, key_name, max_suggestions, cutoff):
+        if key_name.startswith('~'):
+            key_list = difflib.get_close_matches(
+                key_name.lstrip('~'), key_list, max_suggestions, cutoff)
+        else:
+            key_list = [k for k in key_list if key_name in k]
+        return key_list
+
+    @staticmethod
+    def _filter_locked(key_list):
+        return [k for k in key_list if k.get('lock')]
+
     def list(self,
              key_name=None,
              max_suggestions=100,
              cutoff=0.5,
              locked_only=False,
-             key_type=None):
+             key_type=None,
+             names_only=True):
         """Return a list of all keys.
         """
+        ignored_keys = ['stored_passphrase', '_last_modified_at']
         self._assert_valid_stash()
 
         key_list = [k for k in self._storage.list()
-                    if k['name'] != 'stored_passphrase' and
-                    (k.get('lock') if locked_only else True)]
+                    if k['name'] not in ignored_keys]
 
+        if locked_only:
+            key_list = self._filter_locked(key_list)
         if key_type:
-            # To maintain backward compatibility with keys without a type.
-            # The default key type is secret, in which case we also look for
-            # keys with no (None) types.
-            types = ('secret', None) if key_type == 'secret' else [key_type]
-            key_list = [k for k in key_list if k.get('type') in types]
+            key_list = self._filter_by_type(key_list, key_type)
 
-        key_list = [k['name'] for k in key_list]
-        if key_name:
-            if key_name.startswith('~'):
-                key_list = difflib.get_close_matches(
-                    key_name.lstrip('~'), key_list, max_suggestions, cutoff)
-            else:
-                key_list = [k for k in key_list if key_name in k]
+        # TODO: This is BAD! FIX IT FAST!
+        if names_only:
+            key_list = [k['name'] for k in key_list]
+
+            if key_name:
+                key_list = self._filter_close_matches(
+                    key_list, key_name, max_suggestions, cutoff)
 
         audit(
             storage=self._storage.db_path,
@@ -414,6 +442,7 @@ class Stash(object):
 
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
+        self._update_modification_date()
 
     def _change_lock_state(self, key_name, lock):
         self._assert_valid_stash()
@@ -431,6 +460,7 @@ class Stash(object):
             storage=self._storage.db_path,
             action='LOCK' if lock else 'UNLOCK',
             message=json.dumps(dict(key_name=key_name)))
+        self._update_modification_date()
 
     def lock(self, key_name):
         """Lock a key to prevent it from being deleted, purged and modified
@@ -463,6 +493,41 @@ class Stash(object):
 
         for key_name in self.list(key_type=key_type):
             self.delete(key_name)
+
+    def show(self):
+        """Show general stash information
+
+        This will return:
+            * Creation date
+            * Last modification date.
+            * Number of keys of each type and the total number of keys
+            * Number of locked and unlocked keys
+            * Backend type
+            * Stash path
+
+        Note that the `modified_at` field will only show for stashes
+        initialized using versions >0.7.0.
+
+        # TODO: Improve performance
+        """
+        self._assert_valid_stash()
+        all_keys = self.list(names_only=False)
+        keys = dict(
+            all=len(all_keys),
+            secret=len(self._filter_by_type(all_keys, 'secret')),
+            ssh=len(self._filter_by_type(all_keys, 'ssh')),
+            locked=len(self._filter_locked(all_keys)),
+            unlocked=(len(all_keys) - len(self._filter_locked(all_keys)))
+        )
+
+        return {
+            'created_at': self._storage.get('stored_passphrase')['created_at'],
+            'modified_at': self._storage.get('_last_modified_at').get('value'),
+            'key_count': keys,
+            'type': self._storage.__class__.__name__,
+            'stash_path': self._storage.db_path,
+            'stash_name': self._storage._stash_name
+        }
 
     def export(self, output_path=None, decrypt=False):
         """Export all keys in the stash to a list or a file
@@ -570,6 +635,13 @@ class Stash(object):
                 raise GhostError(
                     'The passphrase provided is invalid for this stash. '
                     'Please provide the correct passphrase')
+
+    def _update_modification_date(self, date=None):
+        key = self._storage.get('_last_modified_at')
+        self._storage.delete('_last_modified_at')
+        date = date or _get_current_time()
+        key['date'] = date
+        self._storage.put(key)
 
 
 def migrate(src_path,
@@ -1036,6 +1108,7 @@ def _prettify_dict(key):
 
     pretty_key = ''
     for key, value in key.items():
+        key = key.replace('_', ' ')
         if isinstance(value, dict):
             pretty_value = ''
             for k, v in value.items():
@@ -1155,13 +1228,13 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     `STASH_PATH` is the path to the storage endpoint. If this isn't supplied,
     a default path will be used. In the path, you can specify a name
     for the stash (which, if omitted, will default to `ghost`) like so:
-    `ghost init http://10.10.1.1:8500;stash1`.
+    `ghost init http://10.10.1.1:8500[stash1]`.
 
     After initializing a stash, don't forget you can set environment
     variables for both your stash's path and its passphrase.
     On Linux/OSx you can run:
 
-    export GHOST_STASH_PATH='http://10.10.1.1:8500;stash1'
+    export GHOST_STASH_PATH='http://10.10.1.1:8500[stash1]'
 
     export GHOST_PASSPHRASE=$(cat passphrase.ghost)
 
@@ -1691,3 +1764,31 @@ def _assert_is_ssh_type_key(key):
         sys.exit(
             'Must provide key of type `ssh` (provided `{0}` instead)'.format(
                 key.get('type') or 'secret'))
+
+
+@main.command(name='show', short_help='Show stash info')
+@click.argument('STASH_PATH', type=click.STRING)
+@click.option('-j',
+              '--jsonify',
+              is_flag=True,
+              help='Output in JSON instead')
+@passphrase_option
+@backend_option
+def show_stash(stash_path, jsonify, passphrase, backend):
+    """Show general stash information
+
+    `STASH_PATH` is the path to the storage endpoint. In the path, you can
+    specify a name for the stash (which, if omitted, will default to `ghost`)
+    like so: `ghost init http://10.10.1.1:8500[stash1]`.
+
+    Note that the `modified_at` field will only show for stashes
+    initialized using versions >0.7.0.
+    """
+    stash = _get_stash(backend, stash_path, passphrase)
+    stash_info = stash.show()
+
+    if jsonify:
+        click.echo(json.dumps(stash_info, indent=4, sort_keys=False))
+    else:
+        click.echo('Showing stash info...')
+        click.echo(_prettify_dict(stash_info))
