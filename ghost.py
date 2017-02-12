@@ -133,7 +133,7 @@ class Stash(object):
                  storage,
                  passphrase=None,
                  passphrase_size=12,
-                 iterations=100):
+                 iterations=1000000):
         self._storage = storage
         passphrase = passphrase or generate_passphrase(passphrase_size)
         self.passphrase = passphrase
