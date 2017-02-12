@@ -129,10 +129,15 @@ def get_passphrase(passphrase=None):
 
 
 class Stash(object):
-    def __init__(self, storage, passphrase=None, passphrase_size=12):
+    def __init__(self,
+                 storage,
+                 passphrase=None,
+                 passphrase_size=12,
+                 iterations=100):
         self._storage = storage
         passphrase = passphrase or generate_passphrase(passphrase_size)
         self.passphrase = passphrase
+        self._iterations = iterations
 
     # TODO: Consider base64 encoding instead of hexlification
     _key = None
@@ -148,7 +153,8 @@ class Stash(object):
         self._storage.init()
         self.put(
             name='stored_passphrase',
-            value={'passphrase': self.passphrase})
+            value={'passphrase': self.passphrase},
+            lock=True)
         return self.passphrase
 
     @property
@@ -165,7 +171,8 @@ class Stash(object):
             modify=False,
             metadata=None,
             description='',
-            encrypt=True):
+            encrypt=True,
+            lock=False):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -198,6 +205,11 @@ class Stash(object):
         # `existing_key` will be an empty dict if it doesn't exist
         existing_key = self._handle_existing_key(name, modify)
 
+        if existing_key and existing_key.get('lock'):
+            raise GhostError(
+                'Key `{0}` is locked and therefore cannot be modified. '
+                'Unlock the key and try again'.format(name))
+
         if not value and not existing_key.get('value'):
             raise GhostError('You must provide a value for new keys')
         # TODO: Treat a case in which we try to update an existing key
@@ -222,7 +234,8 @@ class Stash(object):
             created_at=created_at,
             modified_at=modified_at,
             metadata=metadata,
-            uid=uid))
+            uid=uid,
+            lock=lock))
 
         audit(
             storage=self._storage.db_path,
@@ -232,7 +245,8 @@ class Stash(object):
                 value='HIDDEN',
                 description=description,
                 uid=uid,
-                metadata=json.dumps(metadata))))
+                metadata=json.dumps(metadata),
+                lock=lock)))
 
         return key_id
 
@@ -254,17 +268,22 @@ class Stash(object):
 
         return key
 
-    def list(self):
+    def list(self, locked_only=False):
         """Return a list of all keys.
         """
         self._assert_valid_passphrase()
 
-        key_list = [key['name'] for key in self._storage.list()
-                    if key['name'] != 'stored_passphrase']
+        if locked_only:
+            key_list = [key['name'] for key in self._storage.list()
+                        if key['name'] != 'stored_passphrase' and
+                        key['lock']]
+        else:
+            key_list = [key['name'] for key in self._storage.list()
+                        if key['name'] != 'stored_passphrase']
 
         audit(
             storage=self._storage.db_path,
-            action='LIST',
+            action='LIST' + ('[LOCKED]' if locked_only else ''),
             message=json.dumps(dict()))
 
         return key_list
@@ -280,7 +299,12 @@ class Stash(object):
                 'which cannot be deleted')
 
         if not self.get(key_name):
-            raise GhostError('Key {0} not found'.format(key_name))
+            raise GhostError('Key `{0}` not found'.format(key_name))
+        key = self._storage.get(key_name)
+        if key.get('lock'):
+            raise GhostError(
+                'Key `{0}` is locked and therefore cannot be deleted '
+                'Please unlock the key and try again'.format(key_name))
         deleted = self._storage.delete(key_name)
 
         audit(
@@ -290,6 +314,36 @@ class Stash(object):
 
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
+
+    def _change_lock_state(self, key_name, lock):
+        self._assert_valid_passphrase()
+
+        if not self.get(key_name):
+            raise GhostError('Key `{0}` not found'.format(key_name))
+
+        key = self._storage.get(key_name)
+        if not key['lock'] == lock:
+            key['lock'] = lock
+            self._storage.delete(key_name)
+            self._storage.put(key)
+
+        audit(
+            storage=self._storage.db_path,
+            action='LOCK' if lock else 'UNLOCK',
+            message=json.dumps(dict(key_name=key_name)))
+
+    def lock(self, key_name):
+        """Lock a key to prevent it from being deleted, purged and modified
+        """
+        self._change_lock_state(key_name, lock=True)
+
+    def unlock(self, key_name):
+        """Unlock a locked key
+        """
+        self._change_lock_state(key_name, lock=False)
+
+    def is_locked(self, key_name):
+        return self._storage.get(key_name)['lock']
 
     def purge(self, force=False):
         """Purge the stash from all keys
@@ -334,6 +388,8 @@ class Stash(object):
 
         `keys` is a list of dictionaries created by `self.export`
         `stash_path` is a path to a file created by `self.export`
+
+        If `force` is true, existing keys will be overwriten.
         """
         # TODO: Handle keys not dict or key_file not json
         self._assert_valid_passphrase()
@@ -346,6 +402,7 @@ class Stash(object):
             with open(key_file) as stash_file:
                 keys = json.loads(stash_file.read())
 
+        # TODO: Handle existing keys when loading
         for key in keys:
             self.put(
                 name=key['name'],
@@ -362,7 +419,7 @@ class Stash(object):
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=b'ghost',
-                iterations=1000000,
+                iterations=self._iterations,
                 backend=default_backend())
             self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
         return self._key
@@ -399,10 +456,12 @@ class Stash(object):
             self._storage.delete(key_name)
         elif existing_key:
             raise GhostError(
-                'The key already exists. Use the modify flag to overwrite')
+                'Key `{0}` already exists. Use the modify flag to overwrite'
+                .format(key_name))
         elif modify:
             raise GhostError(
-                "The key doesn't exist and therefore cannot be modified")
+                "Key `{0}` doesn't exist and therefore cannot be modified"
+                .format(key_name))
         return existing_key
 
     def _assert_valid_passphrase(self):
@@ -554,6 +613,7 @@ class SQLAlchemyStorage(object):
 
     def init(self):
         if self._local_path:
+            # TODO: Test branching. Remote isn't tested.
             dirname = os.path.dirname(self._local_path)
             if dirname and not os.path.isdir(dirname):
                 os.makedirs(dirname)
@@ -915,6 +975,16 @@ def _parse_path_string(stash_path):
     )
 
 
+def _get_stash(backend, path, passphrase, quiet=False):
+    stash_path = path or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    if not quiet:
+        click.echo('Stash: {0} at {1}'.format(backend, stash_path))
+    passphrase = passphrase or get_passphrase()
+    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
+    stash = Stash(storage, passphrase=passphrase)
+    return stash
+
+
 CLICK_CONTEXT_SETTINGS = dict(
     help_option_names=['-h', '--help'],
     token_normalize_func=lambda param: param.lower())
@@ -995,10 +1065,10 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     """
     stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-    click.echo('Initializing stash...')
     storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
 
     try:
+        click.echo('Initializing stash...')
         if os.path.isfile(PASSPHRASE_FILENAME):
             sys.exit(
                 '{0} already exists. Overwriting might prevent you '
@@ -1044,6 +1114,10 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
               '--modify',
               is_flag=True,
               help='Whether to modify an existing key if it exists')
+@click.option('--lock',
+              is_flag=True,
+              help='Set the key to be locked, preventing its deletion and '
+              'modification')
 @stash_option
 @passphrase_option
 @backend_option
@@ -1052,6 +1126,7 @@ def put_key(key_name,
             description,
             meta,
             modify,
+            lock,
             stash,
             passphrase,
             backend):
@@ -1062,19 +1137,61 @@ def put_key(key_name,
     `VALUE` is a key=value argument which can be provided multiple times.
     it is the encrypted value of your key
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-    click.echo('Stashing key...')
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase)
+
     try:
+        click.echo('Stashing key...')
         stash.put(
             name=key_name,
             value=_build_dict_from_key_value(value),
             modify=modify,
             metadata=_build_dict_from_key_value(meta),
-            description=description)
+            description=description,
+            lock=lock)
+    except GhostError as ex:
+        sys.exit(ex)
+
+
+@main.command(name='lock', short_help='Lock a key')
+@click.argument('KEY_NAME')
+@stash_option
+@passphrase_option
+@backend_option
+def lock_key(key_name,
+             stash,
+             passphrase,
+             backend):
+    """Lock a key to prevent it from being deleted, purged or modified
+
+    `KEY_NAME` is the name of the key to lock
+    """
+    stash = _get_stash(backend, stash, passphrase)
+
+    try:
+        click.echo('Locking key...')
+        stash.lock(key_name=key_name)
+    except GhostError as ex:
+        sys.exit(ex)
+
+
+@main.command(name='unlock', short_help='Unlock a key')
+@click.argument('KEY_NAME')
+@stash_option
+@passphrase_option
+@backend_option
+def unlock_key(key_name,
+               stash,
+               passphrase,
+               backend):
+    """Unlock a key to allow it to be modified, deleted or purged
+
+    `KEY_NAME` is the name of the key to unlock
+    """
+    stash = _get_stash(backend, stash, passphrase)
+
+    try:
+        click.echo('Unlocking key...')
+        stash.unlock(key_name=key_name)
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1112,31 +1229,28 @@ def get_key(key_name,
     if value_name and no_decrypt:
         sys.exit('VALUE_NAME cannot be used in conjuction with --no-decrypt')
 
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    if not jsonify and not value_name:
-        click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-        click.echo('Retrieving key...')
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase, quiet=jsonify or value_name)
+
     try:
         record = stash.get(key_name=key_name, decrypt=not no_decrypt)
     except GhostError as ex:
         sys.exit(ex)
 
     if not record:
-        sys.exit('Key {0} not found'.format(key_name))
+        sys.exit('Key `{0}` not found'.format(key_name))
     if value_name:
         record = record['value'].get(value_name)
         if not record:
-            sys.exit('Value name {0} could not be found under key {1}'.format(
-                value_name, key_name))
+            sys.exit(
+                'Value name `{0}` could not be found under key `{1}`'.format(
+                    value_name, key_name))
 
     if jsonify or value_name:
         click.echo(
             json.dumps(record, indent=4, sort_keys=False).strip('"'),
             nl=True)
     else:
+        click.echo('Retrieving key...')
         click.echo('\n' + _prettify_dict(record))
 
 
@@ -1150,13 +1264,10 @@ def delete_key(key_name, stash, passphrase, backend):
 
     `KEY_NAME` is the name of the key to delete
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-    click.echo('Deleting key...')
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase)
+
     try:
+        click.echo('Deleting key...')
         stash.delete(key_name=key_name)
     except GhostError as ex:
         sys.exit(ex)
@@ -1166,30 +1277,29 @@ def delete_key(key_name, stash, passphrase, backend):
 @click.option('-j',
               '--jsonify',
               is_flag=True,
-              default=False,
               help='Output in JSON instead')
+@click.option('-l',
+              '--locked',
+              is_flag=True,
+              help='Only list locked keys')
 @stash_option
 @passphrase_option
 @backend_option
-def list_keys(jsonify, stash, passphrase, backend):
+def list_keys(jsonify, locked, stash, passphrase, backend):
     """List all keys in the stash
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    if not jsonify:
-        click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-        click.echo('Listing all keys...')
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase, quiet=jsonify)
+
     try:
-        keys = stash.list()
+        keys = stash.list(locked_only=locked)
     except GhostError as ex:
         sys.exit(ex)
-    if not keys:
+    if jsonify:
+        click.echo(json.dumps(keys, indent=4, sort_keys=True))
+    elif not keys:
         click.echo('The stash is empty. Go on, put some keys in there...')
-    elif jsonify:
-        click.echo(json.dumps(keys, indent=4, sort_keys=False))
     else:
+        click.echo('Listing all keys...')
         click.echo(_prettify_list(keys))
 
 
@@ -1205,13 +1315,10 @@ def list_keys(jsonify, stash, passphrase, backend):
 def purge_stash(force, stash, passphrase, backend):
     """Purge the stash from all of its keys
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Stash: {0} at {1}'.format(backend, stash_path))
-    click.echo('Purging stash...')
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase)
+
     try:
+        click.echo('Purging stash...')
         stash.purge(force)
         # Maybe we should verify that the list is empty
         # afterwards?
@@ -1230,12 +1337,10 @@ def purge_stash(force, stash, passphrase, backend):
 def export_keys(output_path, stash, passphrase, backend):
     """Export all keys to a file
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Exporting stash {0} to {1}...'.format(stash_path, output_path))
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase)
+
     try:
+        click.echo('Exporting stash to {0}...'.format(output_path))
         stash.export(output_path=output_path)
     except GhostError as ex:
         sys.exit(ex)
@@ -1251,12 +1356,9 @@ def load_keys(key_file, stash, passphrase, backend):
 
     `KEY_FILE` is the exported stash file to load keys from
     """
-    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
-    click.echo('Importing all keys from {0} to {1}...'.format(
-        key_file, stash_path))
-    passphrase = passphrase or get_passphrase()
-    storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
-    stash = Stash(storage, passphrase=passphrase)
+    stash = _get_stash(backend, stash, passphrase)
+
+    click.echo('Importing all keys from {0}...'.format(key_file))
     stash.load(key_file=key_file)
 
 
@@ -1294,6 +1396,7 @@ def migrate_stash(source_stash_path,
     """
     click.echo('Migrating all keys from {0} to {1}...'.format(
         source_stash_path, destination_stash_path))
+
     try:
         migrate(
             src_path=source_stash_path,
