@@ -1210,7 +1210,7 @@ class TestCLI:
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
         assert 'Key `aws` is locked' in result.output
-        result = _invoke('get_key aws key').output == 'value'
+        assert _invoke('get_key aws key').output.strip() == 'value'
 
     def test_get(self, test_cli_stash):
         _invoke('put_key aws key=value')
