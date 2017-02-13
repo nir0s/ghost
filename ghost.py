@@ -453,7 +453,9 @@ class Stash(object):
     def _handle_existing_key(self, key_name, modify):
         existing_key = self._storage.get(key_name) or {}
         if existing_key and modify:
-            self._storage.delete(key_name)
+            # TODO: Consider replacing this with self.delete(key_name)
+            if not existing_key['lock']:
+                self._storage.delete(key_name)
         elif existing_key:
             raise GhostError(
                 'Key `{0}` already exists. Use the modify flag to overwrite'
