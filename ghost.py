@@ -24,6 +24,7 @@ import uuid
 import base64
 import random
 import string
+import difflib
 import logging
 import binascii
 import warnings
@@ -268,11 +269,14 @@ class Stash(object):
 
         return key
 
-    def list(self, locked_only=False):
+    def list(self,
+             key_name=None,
+             max_suggestions=100,
+             cutoff=0.5,
+             locked_only=False):
         """Return a list of all keys.
         """
         self._assert_valid_passphrase()
-
         if locked_only:
             key_list = [key['name'] for key in self._storage.list()
                         if key['name'] != 'stored_passphrase' and
@@ -280,6 +284,13 @@ class Stash(object):
         else:
             key_list = [key['name'] for key in self._storage.list()
                         if key['name'] != 'stored_passphrase']
+
+        if key_name:
+            if key_name.startswith('~'):
+                key_list = difflib.get_close_matches(
+                    key_name.lstrip('~'), key_list, max_suggestions, cutoff)
+            else:
+                key_list = [k for k in key_list if key_name in k]
 
         audit(
             storage=self._storage.db_path,
@@ -1280,6 +1291,15 @@ def delete_key(key_name, stash, passphrase, backend):
 
 
 @main.command(name='list')
+@click.argument('KEY_NAME', required=False)
+@click.option('-m',
+              '--max-suggestions',
+              default=3,
+              help='The maximum number of suggestions to offer for `KEY_NAME`')
+@click.option('-c',
+              '--cutoff',
+              default=0.5,
+              help='The cutoff by which close matches will be provided')
 @click.option('-j',
               '--jsonify',
               is_flag=True,
@@ -1291,13 +1311,28 @@ def delete_key(key_name, stash, passphrase, backend):
 @stash_option
 @passphrase_option
 @backend_option
-def list_keys(jsonify, locked, stash, passphrase, backend):
+def list_keys(key_name,
+              max_suggestions,
+              cutoff,
+              jsonify,
+              locked,
+              stash,
+              passphrase,
+              backend):
     """List all keys in the stash
+
+    If `KEY_NAME` is provided, will look for keys containing `KEY_NAME`.
+    If `KEY_NAME` starts with `~`, close matches will be provided according
+    to `max_suggestions` and `cutoff`.
     """
     stash = _get_stash(backend, stash, passphrase, quiet=jsonify)
 
     try:
-        keys = stash.list(locked_only=locked)
+        keys = stash.list(
+            key_name=key_name,
+            max_suggestions=max_suggestions,
+            cutoff=cutoff,
+            locked_only=locked)
     except GhostError as ex:
         sys.exit(ex)
     if jsonify:
