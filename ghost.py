@@ -28,6 +28,8 @@ import difflib
 import logging
 import binascii
 import warnings
+import tempfile
+import subprocess
 from datetime import datetime
 
 try:
@@ -84,6 +86,17 @@ STORAGE_DEFAULT_PATH_MAPPING = {
 
 AUDIT_LOG_FILE_PATH = os.environ.get(
     'GHOST_AUDIT_LOG', os.path.join(GHOST_HOME, 'audit.log'))
+
+KEY_FIELD_SCHEMA = {
+    'ssh': {
+        'requires': ['conn'],
+        'oneof': [['ssh_key_path', 'ssh_key']],
+    },
+    'secret': {
+        'requires': [],
+        'oneof': [[]],
+    }
+}
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
@@ -166,6 +179,32 @@ class Stash(object):
                 return True
         return False
 
+    def _validate_key_schema(self, value, key_type):
+        # 'ssh': {
+        #     'requires': ['conn'],
+        #     'oneof': [['ssh_key_path', 'ssh_key']]
+        # }
+        schema = KEY_FIELD_SCHEMA[key_type]
+
+        def validate_single(list_of_keys, value):
+            for key in list_of_keys:
+                if key not in value.keys():
+                    raise GhostError(
+                        'Must provide value `{0}` for key of type {1}'
+                        .format(key, key_type))
+
+        def validate_oneof(key_sets, value):
+            for key_set in key_sets:
+                if key_set:
+                    keys_exist = [k in value.keys() for k in key_set]
+                    if not (any(keys_exist) and not all(keys_exist)):
+                        raise GhostError(
+                            'Must provide one of {0} for key of type {1}'
+                            .format(key_set, key_type))
+
+        validate_single(schema['requires'], value)
+        validate_oneof(schema['oneof'], value)
+
     def put(self,
             name,
             value=None,
@@ -173,7 +212,8 @@ class Stash(object):
             metadata=None,
             description='',
             encrypt=True,
-            lock=False):
+            lock=False,
+            key_type='secret'):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -199,34 +239,42 @@ class Stash(object):
 
         Returns the id of the key in the database
         """
-        self._assert_valid_passphrase()
+        def assert_key_is_unlocked(existing_key):
+            if existing_key and existing_key.get('lock'):
+                raise GhostError(
+                    'Key `{0}` is locked and therefore cannot be modified. '
+                    'Unlock the key and try again'.format(name))
 
+        def assert_value_provided_for_new_key(value, existing_key):
+            if not value and not existing_key.get('value'):
+                raise GhostError('You must provide a value for new keys')
+
+        self._assert_valid_passphrase()
+        self._validate_key_schema(value, key_type)
         if value and encrypt and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
+
+        # TODO: This should be refactored. `_handle_existing_key` deletes
+        # the key rather implicitly. It shouldn't do that.
         # `existing_key` will be an empty dict if it doesn't exist
         existing_key = self._handle_existing_key(name, modify)
-
-        if existing_key and existing_key.get('lock'):
-            raise GhostError(
-                'Key `{0}` is locked and therefore cannot be modified. '
-                'Unlock the key and try again'.format(name))
-
-        if not value and not existing_key.get('value'):
-            raise GhostError('You must provide a value for new keys')
-        # TODO: Treat a case in which we try to update an existing key
-        # but don't provide a value in which nothing will happen.
-        created_at = existing_key.get('created_at') or _get_current_time()
-        uid = existing_key.get('uid') or str(uuid.uuid4())
-
-        modified_at = _get_current_time()
+        assert_key_is_unlocked(existing_key)
+        assert_value_provided_for_new_key(value, existing_key)
 
         if value:
             if encrypt:
                 value = self._encrypt(value)
         else:
             value = existing_key.get('value')
+
+        # TODO: Treat a case in which we try to update an existing key
+        # but don't provide a value in which nothing will happen.
         description = description or existing_key.get('description')
+        created_at = existing_key.get('created_at') or _get_current_time()
+        modified_at = _get_current_time()
         metadata = metadata or existing_key.get('metadata')
+        uid = existing_key.get('uid') or str(uuid.uuid4())
+        key_type = key_type or existing_key.get('type')
 
         key_id = self._storage.put(dict(
             name=name,
@@ -236,7 +284,8 @@ class Stash(object):
             modified_at=modified_at,
             metadata=metadata,
             uid=uid,
-            lock=lock))
+            lock=lock,
+            type=key_type))
 
         audit(
             storage=self._storage.db_path,
@@ -247,7 +296,8 @@ class Stash(object):
                 description=description,
                 uid=uid,
                 metadata=json.dumps(metadata),
-                lock=lock)))
+                lock=lock,
+                type=key_type)))
 
         return key_id
 
@@ -273,18 +323,24 @@ class Stash(object):
              key_name=None,
              max_suggestions=100,
              cutoff=0.5,
-             locked_only=False):
+             locked_only=False,
+             key_type=None):
         """Return a list of all keys.
         """
         self._assert_valid_passphrase()
-        if locked_only:
-            key_list = [key['name'] for key in self._storage.list()
-                        if key['name'] != 'stored_passphrase' and
-                        key['lock']]
-        else:
-            key_list = [key['name'] for key in self._storage.list()
-                        if key['name'] != 'stored_passphrase']
 
+        key_list = [k for k in self._storage.list()
+                    if k['name'] != 'stored_passphrase' and
+                    (k.get('lock') if locked_only else True)]
+
+        if key_type:
+            # To maintain backward compatibility with keys without a type.
+            # The default key type is secret, in which case we also look for
+            # keys with no (None) types.
+            types = ('secret', None) if key_type == 'secret' else [key_type]
+            key_list = [k for k in key_list if k.get('type') in types]
+
+        key_list = [k['name'] for k in key_list]
         if key_name:
             if key_name.startswith('~'):
                 key_list = difflib.get_close_matches(
@@ -309,6 +365,7 @@ class Stash(object):
                 '`stored_passphrase` is a reserved ghost key name '
                 'which cannot be deleted')
 
+        # TODO: Optimize. We get from the storage twice here for no reason
         if not self.get(key_name):
             raise GhostError('Key `{0}` not found'.format(key_name))
         key = self._storage.get(key_name)
@@ -316,6 +373,7 @@ class Stash(object):
             raise GhostError(
                 'Key `{0}` is locked and therefore cannot be deleted '
                 'Please unlock the key and try again'.format(key_name))
+
         deleted = self._storage.delete(key_name)
 
         audit(
@@ -333,7 +391,7 @@ class Stash(object):
             raise GhostError('Key `{0}` not found'.format(key_name))
 
         key = self._storage.get(key_name)
-        if not key['lock'] == lock:
+        if not key.get('lock') == lock:
             key['lock'] = lock
             self._storage.delete(key_name)
             self._storage.put(key)
@@ -354,9 +412,9 @@ class Stash(object):
         self._change_lock_state(key_name, lock=False)
 
     def is_locked(self, key_name):
-        return self._storage.get(key_name)['lock']
+        return self._storage.get(key_name).get('lock')
 
-    def purge(self, force=False):
+    def purge(self, force=False, key_type=None):
         """Purge the stash from all keys
         """
         self._assert_valid_passphrase()
@@ -372,7 +430,7 @@ class Stash(object):
             action='PURGE',
             message=json.dumps(dict()))
 
-        for key_name in self.list():
+        for key_name in self.list(key_type=key_type):
             self.delete(key_name)
 
     def export(self, output_path=None, decrypt=False):
@@ -420,6 +478,8 @@ class Stash(object):
                 value=key['value'],
                 metadata=key['metadata'],
                 description=key['description'],
+                lock=key.get('lock'),
+                key_type=key.get('type'),
                 encrypt=encrypt)
 
     @property
@@ -1024,10 +1084,11 @@ stash_option = click.option(
     '-s',
     '--stash',
     envvar='GHOST_STASH_PATH',
+    metavar='PATH',
     type=click.STRING,
     help='Path to the storage (Can be set via the `GHOST_STASH_PATH` '
     'env var). You can also provide a stash name (defaults to ghost) '
-    'by providing a name after the colon (e.g. http://...:8500;stash1)')
+    'by providing a name in brackets (e.g. http://...:8500[name])')
 passphrase_option = click.option(
     '-p',
     '--passphrase',
@@ -1120,6 +1181,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
               '--description',
               help="The key's description")
 @click.option('--meta',
+              metavar='key=value',
               multiple=True,
               help='`key=value` pairs to serve as metadata for the key '
               '(Can be used multiple times)')
@@ -1131,6 +1193,11 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
               is_flag=True,
               help='Set the key to be locked, preventing its deletion and '
               'modification')
+@click.option('-t',
+              '--key-type',
+              type=click.Choice(['ssh', 'secret']),
+              default='secret',
+              help='The type of the key')
 @stash_option
 @passphrase_option
 @backend_option
@@ -1140,6 +1207,7 @@ def put_key(key_name,
             meta,
             modify,
             lock,
+            key_type,
             stash,
             passphrase,
             backend):
@@ -1160,13 +1228,14 @@ def put_key(key_name,
             modify=modify,
             metadata=_build_dict_from_key_value(meta),
             description=description,
-            lock=lock)
+            lock=lock,
+            key_type=key_type)
         click.echo('Key stashed successfully')
     except GhostError as ex:
         sys.exit(ex)
 
 
-@main.command(name='lock', short_help='Lock a key')
+@main.command(name='lock', short_help='Lock a key to protect it')
 @click.argument('KEY_NAME')
 @stash_option
 @passphrase_option
@@ -1219,7 +1288,7 @@ def unlock_key(key_name,
               '--jsonify',
               is_flag=True,
               default=False,
-              help='Output in JSON instead')
+              help='Output in JSON')
 @click.option('--no-decrypt',
               is_flag=True,
               default=False,
@@ -1290,7 +1359,7 @@ def delete_key(key_name, stash, passphrase, backend):
         sys.exit(ex)
 
 
-@main.command(name='list')
+@main.command(name='list', short_help='List keys')
 @click.argument('KEY_NAME', required=False)
 @click.option('-m',
               '--max-suggestions',
@@ -1303,11 +1372,16 @@ def delete_key(key_name, stash, passphrase, backend):
 @click.option('-j',
               '--jsonify',
               is_flag=True,
-              help='Output in JSON instead')
+              help='Output in JSON')
 @click.option('-l',
               '--locked',
               is_flag=True,
               help='Only list locked keys')
+@click.option('-t',
+              '--key-type',
+              type=click.Choice(['ssh', 'secret']),
+              default=None,
+              help='The type of the key to put')
 @stash_option
 @passphrase_option
 @backend_option
@@ -1316,6 +1390,7 @@ def list_keys(key_name,
               cutoff,
               jsonify,
               locked,
+              key_type,
               stash,
               passphrase,
               backend):
@@ -1332,7 +1407,8 @@ def list_keys(key_name,
             key_name=key_name,
             max_suggestions=max_suggestions,
             cutoff=cutoff,
-            locked_only=locked)
+            locked_only=locked,
+            key_type=key_type)
     except GhostError as ex:
         sys.exit(ex)
     if jsonify:
@@ -1452,3 +1528,47 @@ def migrate_stash(source_stash_path,
     except GhostError as ex:
         sys.exit(ex)
     click.echo('Migration complete!')
+
+
+@main.command(name='ssh', short_help='Use a key to connect to a machine')
+@click.argument('KEY_NAME')
+@stash_option
+@passphrase_option
+@backend_option
+def ssh(key_name, stash, passphrase, backend):
+    """Use an ssh type key to connect to a machine via ssh
+
+    Note that trying to use a key of the wrong type (e.g. `secret`)
+    will result in an error.
+
+    `KEY_NAME` is the key to use.
+    """
+    # TODO: find_executable or raise
+    def ssh_connect(ssh_key_path, conn):
+        try:
+            click.echo('Connecting to {0}...'.format(conn))
+            subprocess.check_call(['ssh', conn, '-i', ssh_key_path])
+        except subprocess.CalledProcessError:
+            sys.exit(1)
+
+    stash = _get_stash(backend, stash, passphrase)
+    key = stash.get(key_name)
+    if not key.get('type') == 'ssh':
+        sys.exit(
+            'Must provide key of type `ssh` (provided `{0}` instead)'.format(
+                key.get('type') or 'secret'))
+
+    conn = key['value']['conn']
+    ssh_key_path = key['value'].get('ssh_key_path')
+    ssh_key = key['value'].get('ssh_key')
+
+    if ssh_key_path:
+        ssh_connect(ssh_key_path, conn)
+    elif ssh_key:
+        fd, ssh_key_path = tempfile.mkstemp()
+        os.write(fd, ssh_key.encode('utf8'))
+        os.close(fd)
+        try:
+            ssh_connect(ssh_key_path, conn)
+        finally:
+            os.remove(ssh_key_path)
