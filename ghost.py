@@ -1150,6 +1150,7 @@ def put_key(key_name,
             metadata=_build_dict_from_key_value(meta),
             description=description,
             lock=lock)
+        click.echo('Key stashed successfully')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1172,6 +1173,7 @@ def lock_key(key_name,
     try:
         click.echo('Locking key...')
         stash.lock(key_name=key_name)
+        click.echo('Key locked successfully')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1194,6 +1196,7 @@ def unlock_key(key_name,
     try:
         click.echo('Unlocking key...')
         stash.unlock(key_name=key_name)
+        click.echo('Key unlocked successfully')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1271,6 +1274,7 @@ def delete_key(key_name, stash, passphrase, backend):
     try:
         click.echo('Deleting key...')
         stash.delete(key_name=key_name)
+        click.echo('Key deleted successfully')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1324,6 +1328,7 @@ def purge_stash(force, stash, passphrase, backend):
         stash.purge(force)
         # Maybe we should verify that the list is empty
         # afterwards?
+        click.echo('Purge complete!')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1344,6 +1349,7 @@ def export_keys(output_path, stash, passphrase, backend):
     try:
         click.echo('Exporting stash to {0}...'.format(output_path))
         stash.export(output_path=output_path)
+        click.echo('Export complete!')
     except GhostError as ex:
         sys.exit(ex)
 
@@ -1362,6 +1368,7 @@ def load_keys(key_file, stash, passphrase, backend):
 
     click.echo('Importing all keys from {0}...'.format(key_file))
     stash.load(key_file=key_file)
+    click.echo('Import complete!')
 
 
 @main.command(name='migrate')
