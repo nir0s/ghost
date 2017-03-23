@@ -1108,6 +1108,65 @@ class TestStash:
         test_stash.unlock('aws')
         assert test_stash.is_locked('aws') is False
 
+    def test_list_filtered_matches(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        test_stash.put('aws-2', {'key': 'value'})
+        test_stash.put('abws-2', {'key': 'value'})
+        test_stash.put('gcp-3', {'key': 'value'})
+
+        result = test_stash.list('aws')
+        assert len(result) == 2
+        assert 'aws' in result
+        assert 'aws-2' in result
+
+    def test_list_closest_matches(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        test_stash.put('aws-2', {'key': 'value'})
+        test_stash.put('abws-2', {'key': 'value'})
+        test_stash.put('gcp-3', {'key': 'value'})
+
+        # this has a 0.5 cutoff
+        result = test_stash.list('~aws')
+        assert len(result) == 3
+        assert 'aws' in result
+        assert 'aws-2' in result
+        assert 'abws-2' in result
+
+        # should return two matches instead of three
+        # as the cutoff is 0.7 instead of the default 0.5.
+        result = test_stash.list('~aws', cutoff=0.7)
+        assert len(result) == 2
+        assert 'aws' in result
+        assert 'aws-2' in result
+
+        # should return two matches instead of three. one is the
+        # original one and one is a close match according to the max
+        result = test_stash.list('~aws', max_suggestions=2)
+        assert len(result) == 2
+        assert 'aws' in result
+        assert 'aws-2' in result
+
+    def test_list_locked_closest_matches(self, test_stash):
+        test_stash.put('aws', {'key': 'value'}, lock=True)
+        test_stash.put('aws-2', {'key': 'value'})
+        test_stash.put('abws-2', {'key': 'value'}, lock=True)
+        test_stash.put('gcp-3', {'key': 'value'})
+
+        result = test_stash.list('~aws', locked_only=True)
+        assert len(result) == 2
+        assert 'aws' in result
+        assert 'abws-2' in result
+
+    def test_list_locked_filtered_matches(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        test_stash.put('aws-2', {'key': 'value'}, lock=True)
+        test_stash.put('abws-2', {'key': 'value'})
+        test_stash.put('gcp-3', {'key': 'value'})
+
+        result = test_stash.list('aws', locked_only=True)
+        assert len(result) == 1
+        assert 'aws-2' in result
+
 
 def _create_migration_env(test_stash, temp_file_path):
         test_stash.put('aws', {'a': 'b'})

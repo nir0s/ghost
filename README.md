@@ -225,6 +225,39 @@ $ ghost unlock my_key
 
 ```
 
+## Listing containing matches or closest match
+
+We can also list keys which contain a certain string or some close matches to that string.
+
+For example, let's assume we have four keys: `aws`, `aws-2`, `abws-2` and `gcp`:
+
+```shell
+$ ghost list
+Listing all keys...
+Available Keys:
+  - aws
+  - aws-2
+  - abws-2
+  - gcp
+
+$ ghost list aws
+Listing all keys...
+Available Keys:
+  - aws
+  - aws-2
+
+$ ghost list ~aws
+Listing all keys...
+Available Keys:
+  - aws
+  - aws-2
+  - abws-2
+
+```
+
+* Providing a `KEY_NAME` argument to `ghost list` will allow us to look for any keys containing `KEY_NAME`.
+* Providing a tilde infront of `KEY_NAME` allows us to look for closest matches. The cutoff weight can be passed using the `--cutoff` flag (or the `cutoff` argument in Python).
+* Note that this does not mean you can't provide key names starting with a tilde, as ~aws will always be a close match of aws unless the cutoff is high enough in which case it'll stop being reasonable to search for closest matches (around ~0.8 or so).
 
 ## Purging a stash
 
