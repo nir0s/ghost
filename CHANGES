@@ -1,4 +1,17 @@
-**0.5.0 (2017-02-07)
+**0.6.0** (2017-03-26)
+
+* Allow to use multiple stashes on the same backend
+* Allow to lock and unlock keys to prevent deletion and modification of critical keys
+* Allow to list close matches or containing strings
+* Add key type system to allow for additional functionality. See github issue #106
+* Add `ghost ssh` command to allow to connect to a machhine based on a key of type `ssh`
+* Error out instead of overriding passphrase.ghost file when generating two stashes
+* Re-encrypt on migrate only if passphrases are different between the stashes
+* Change `transation.log` file name to `audit.log`
+* Add more verbose logging in the CLI
+
+
+**0.5.0** (2017-02-07)
 
 * Use default stash path for tinydb when using the CLI so that it is no longer a required option
 * Add automatic reading of `passphrase.ghost` from different locations (cwd/..., ~/.ghost/... and /etc/ghost/...)
@@ -13,12 +26,12 @@
 * Improve code quality
 
 
-**0.4.1 (2016-10-11)
+**0.4.1** (2016-10-11)
 
 * Fix any remaining Windows related issues and fix the tests. Windows support is now official.
 
 
-**0.4.0 (2016-10-11)
+**0.4.0** (2016-10-11)
 
 * Add a Vault backend
 * Add an Elasticsearch backend
@@ -33,7 +46,7 @@
 * Fix not being able to create a stash in the `cwd` when using a file based backend like TinyDB or SQLite
 
 
-**0.3.0 (2016-09-25)**
+**0.3.0** (2016-09-25)**
 
 * Generated passphrase will now be printed to a file (`cwd/passphrase.ghost`) instead of to the screen.
 * Add 99% test coverage.
@@ -49,7 +62,7 @@
 * Remove `T` from the timestamp in the `modified_at` and `created_at` fields of a key.
 
 
-**0.2.0 (2016-09-18)**
+**0.2.0** (2016-09-18)**
 
 * Replace simple-crypt with cryptography for a faster and more common encryption engine.
 * Replace the current inheritence implementation with a composition implementation which easily allow to implement additional backends.
@@ -60,7 +73,7 @@
 * Change the `--val` flag to `--value`. `--val` is just weird.
 
 
-**0.1.4 (2016-09-15)**
+**0.1.4** (2016-09-15)**
 
 * First release of ghost
 * Support both TinyDB and SQLAlchemy as supported backends.

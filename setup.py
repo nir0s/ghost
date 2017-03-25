@@ -12,7 +12,7 @@ def read(*parts):
 
 setup(
     name='ghost',
-    version="0.5.0",
+    version="0.6.0",
     url='https://github.com/nir0s/ghost',
     author='nir0s',
     author_email='nir36g@gmail.com',
@@ -23,8 +23,8 @@ setup(
     py_modules=['ghost'],
     entry_points={'console_scripts': ['ghost = ghost:main']},
     install_requires=[
-        "click==6.7",
-        "tinydb==3.2.2",
+        "click>=6.7",
+        "tinydb>=3.2.2",
         "cryptography>=1.5.0"
     ],
     extras_require={
