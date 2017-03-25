@@ -64,11 +64,14 @@ Commands:
   export   Export all keys to a file
   get      Retrieve a key from the stash
   init     Init a stash
-  list     List all keys in the stash
+  list     List all keys in the stash If `KEY_NAME` is...
   load     Load all keys from an exported key file to...
+  lock     Lock a key
   migrate  Migrate all keys from a source stash to a...
   purge    Purge the stash from all of its keys
   put      Insert a key to the stash
+  ssh      Use an ssh type key to connect to a machine...
+  unlock   Unlock a key
 
 
 # Initializing a stash
@@ -203,6 +206,11 @@ $ ghost init http://internal-es:9200[stash-name] --backend elasticsearch
 
 You can initialize as many stashes as you want, as long, of course, as each storage backend's endpoint has a unique name for each of its stashes.
 
+You can then initialize another:
+
+```shell
+$ ghost init http://internal-es:9200[another-stash] --backend elasticsearch
+```
 
 ## Locking and Unlocking keys
 
@@ -258,6 +266,40 @@ Available Keys:
 * Providing a `KEY_NAME` argument to `ghost list` will allow us to look for any keys containing `KEY_NAME`.
 * Providing a tilde infront of `KEY_NAME` allows us to look for closest matches. The cutoff weight can be passed using the `--cutoff` flag (or the `cutoff` argument in Python).
 * Note that this does not mean you can't provide key names starting with a tilde, as ~aws will always be a close match of aws unless the cutoff is high enough in which case it'll stop being reasonable to search for closest matches (around ~0.8 or so).
+
+## ssh-ing to a machine
+
+Ghost allows you to store a key of type `ssh` and then use `ghost ssh` to connect to the machine.
+
+This allows you to store secret information on your most used machines (you probably won't do that for 4000 application servers, unless you're crazy) and connect to them easily.
+
+```bash
+$ ghost put my-machine --type ssh conn=ubuntu@10.10.1.10 key_file_path=~/.ssh/key.pem
+
+$ ghost ssh my-machine
+Welcome to Ubuntu 16.04.2 LTS (GNU/Linux 4.4.0-64-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  Get cloud support with Ubuntu Advantage Cloud Guest:
+    http://www.ubuntu.com/business/services/cloud
+
+17 packages can be updated.
+0 updates are security updates.
+
+
+*** System restart required ***
+Last login: Wed Mar 22 21:07:21 2017 from 46.120.240.223
+ubuntu@10.10.1.10:~$
+...
+
+```
+
+An added nicety is that you don't actually have to have key files stored on your file system, as ghost knows how to address (unlike the `ssh` executable) keys stored as strings. So instead of providing `ssh_key_path`, you could provide `ssh_key=...SSH_STRING...` and ghost will use that automatically.
+
+Note that ghost will force you to provide the `conn` and one of `ssh_key` or `ssh_key_path` values when using the `--type=ssh` key type.
 
 ## Purging a stash
 
@@ -327,7 +369,7 @@ To enable, run `pip install ghost[consul]`
 NOTE: As per [consul's documentation], you cannot provide values larger
 than 512kb.
 
-The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but to prevent dataloss, that is of course not recommended.
+The Consul backend allows to use Consul's distributed nature to distribute keys between servers. Consul's kv-store (v1) is used to store the keys. You must configure your Consul cluster prior to using it with Ghost as ghost will practically do zero-configuration on your cluster. As long as the kv-store's REST API is accessible to ghost, you're good. You may, of course, use a single Consul server as a stash, but to prevent dataloss, that is of course not recommended.
 
 ### [Vault](http://www.vaultproject.io)
 
@@ -337,7 +379,7 @@ To enable, run `pip install ghost[vault]`
 
 NOTE: You MUST provide your Vault token either via the API or via the `VAULT_TOKEN` env var to use the Vault backend.
 
-Controversially, you may use Vault as your stash. Since Vault itself encrypts and decrypts keys and requires a token, it would seem weird to use ghost as a front-end for it. I do not recommend using ghost with Vault unless you need to do cross-backend work - that is, use multiple backends at once or preserve a single API where Vault isn't always accessible. The main reason for using ghost and not Vault is mainly its no-server nature. If you already have Vault running, you may as well use its CLI/API and not use ghost to overcome unnecessary abstraction layers.
+Ironically maybe, you may use Vault as your stash. Since Vault itself encrypts and decrypts keys and requires a token, it would seem weird to use ghost as a front-end for it. I do not recommend using ghost with Vault unless you need to do cross-backend work - that is, use multiple backends at once or preserve a single API where Vault isn't always accessible. The main reason for using ghost and not Vault is mainly its no-server nature. If you already have Vault running, you may as well use its CLI/API and not use ghost to overcome unnecessary abstraction layers.
 
 As such, much like with Consul, note that ghost does not provide any complicated configuration options for Vault using the CLI or otherwise. You need to have your Vault[Cluster] preconfigured after-which ghost will store all keys under the `secrets` path (can be overriden). You may provide a key named `aws/account_1`, for instance, in which case ghost will just pass the path along to Vault.
 
@@ -416,6 +458,7 @@ stash = Stash(storage, passphrase='SAME_PASSPHRASE')
 decrypted_value = stash._decrypt(encrypted_value_from_file)
 ```
 
+Note that if you're using Consul as a backend, the distribution nature of its kv-store allows to delegate keys easily.
 
 ## Testing
 

@@ -19,6 +19,7 @@ import shlex
 import base64
 import shutil
 import tempfile
+import subprocess
 
 import mock
 import pytest
@@ -1218,6 +1219,14 @@ def test_cli_stash(stash_path):
         pass
 
 
+def _print_command(cmd):
+    raise RuntimeError('CMD: {0}'.format(cmd))
+
+
+def _raise_subprocess_call_error(cmd):
+    raise subprocess.CalledProcessError(1, cmd)
+
+
 class TestCLI:
     @staticmethod
     def _assert_bad_passphrase(result):
@@ -1498,6 +1507,42 @@ class TestCLI:
         assert result.exit_code == 1
         assert 'Key `aws` not found' in result.output
 
+    @mock.patch('ghost.subprocess.check_call', _print_command)
+    @pytest.mark.skipif(os.name == 'nt', reason='TODO')
+    def test_ssh_with_key(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' ssh_key='123' -t ssh")
+        result = _invoke('ssh server')
+        assert 'ssh' in str(result.exception)
+        assert 'ubuntu@10.10.1.10' in str(result.exception)
+        assert '-i' in str(result.exception)
+        assert '/tmp/' in str(result.exception)
+
+    @mock.patch('ghost.subprocess.check_call', _print_command)
+    def test_ssh_with_key_path(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' "
+                "ssh_key_path='/path/to/key' -t ssh")
+        result = _invoke('ssh server')
+        assert 'ssh' in str(result.exception)
+        assert 'ubuntu@10.10.1.10' in str(result.exception)
+        assert '-i' in str(result.exception)
+        assert '/path/to/key' in str(result.exception)
+
+    # @pytest.mark.skipif(os.environ.get('CI') is None, reason='Because I can')
+    @mock.patch('ghost.subprocess.check_call', _raise_subprocess_call_error)
+    def test_ssh_failed(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' "
+                "ssh_key_path='/path/to/key' -t ssh")
+        result = _invoke('ssh server')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+
+    def test_ssh_with_non_ssh_type_key(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' "
+                "ssh_key_path='/path/to/key'")
+        result = _invoke('ssh server')
+        assert type(result.exception) == SystemExit
+        assert 'Must provide key of type `ssh`' in result.output
+
 
 class TestMultiStash:
     # TODO: Test that migrate works when using multi-stash mode
@@ -1522,3 +1567,34 @@ class TestMultiStash:
             'db_path': '/etc/my-stash.json',
             'stash_name': 'ghost'
         }
+
+
+class TestTypeSystem(object):
+    def test_put_key_with_missing_required_value(self, test_stash):
+        value = {'ssh_key': '...'}
+
+        with pytest.raises(ghost.GhostError) as ex:
+            test_stash.put('server', value=value, key_type='ssh')
+        assert 'Must provide value' in str(ex.value)
+
+    def test_put_key_with_missing_oneof_value(self, test_stash):
+        value = {'conn': '...'}
+
+        with pytest.raises(ghost.GhostError) as ex:
+            test_stash.put('server', value=value, key_type='ssh')
+        assert 'Must provide one of' in str(ex.value)
+
+    def test_put_key_with_too_many_oneof_values(self, test_stash):
+        value = {'conn': 'x', 'ssh_key': '...', 'ssh_key_path': '...'}
+
+        with pytest.raises(ghost.GhostError) as ex:
+            test_stash.put('server', value=value, key_type='ssh')
+        assert 'Must provide one of' in str(ex.value)
+
+    def test_list_key_of_type(self, test_stash):
+        test_stash.put('some-key', value={'a': 'b'})
+
+        value = {'conn': 'ubuntu@10.10.1.10', 'ssh_key': '...'}
+        test_stash.put('server', value=value, key_type='ssh')
+        key_list = test_stash.list(key_type='ssh')
+        assert key_list == ['server']
