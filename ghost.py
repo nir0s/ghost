@@ -96,6 +96,8 @@ KEY_FIELD_SCHEMA = {
     'secret': {
         'requires': [],
         'oneof': [[]],
+        'optional': [],
+        'optionaloneof': [[]]
     }
 }
 
@@ -205,6 +207,8 @@ class Stash(object):
 
         validate_single(schema['requires'], value)
         validate_oneof(schema['oneof'], value)
+        # validate_single(schema['optional'], value)
+        # validate_oneof(schema['optionaloneof'], value)
 
     def put(self,
             name,
@@ -1589,33 +1593,65 @@ def ssh(key_name, stash, passphrase, backend):
     `KEY_NAME` is the key to use.
     """
     # TODO: find_executable or raise
-    def ssh_connect(ssh_key_path, conn):
+    def ssh_connect(ssh_key_path, conn, **kwargs):
+        bastion = kwargs.get('bastion')
+        bastion_key = kwargs.get('bastion_key')
+
         try:
-            click.echo('Connecting to {0}...'.format(conn))
-            subprocess.check_call(['ssh', conn, '-i', ssh_key_path])
+            if not bastion:
+                click.echo('Connecting to {0}...'.format(conn))
+                subprocess.check_call(['ssh', conn, '-i', ssh_key_path])
+            else:
+                click.echo('Connecting to {0} via {1}...'.format(
+                    conn, bastion))
+                _, _host = conn.split('@')
+                hp = _host.split(':')
+                host, port = (hp[0], hp[1]) if len(hp) == 2 else (hp[0], '22')
+                idf = 'IdentityFile="{0}"'.format(bastion_key)
+                proxy = 'ProxyCommand="ssh -i {0} {1} nc {2} {3}"'.format(
+                    bastion_key or ssh_key_path, bastion, host, port)
+                command = ['/usr/bin/ssh', '-o', idf, '-o', proxy, conn]
+                click.echo('Executing : {0}'.format(
+                    ' '.join(['/usr/bin/ssh', '-o', idf, '-o', proxy, conn])))
+                subprocess.check_call(' '.join(command), shell=True)
+
         except subprocess.CalledProcessError:
             sys.exit(1)
 
     stash = _get_stash(backend, stash, passphrase)
     key = stash.get(key_name)
+
     if key:
-        if not key.get('type') == 'ssh':
-            sys.exit('Must provide key of type `ssh` (provided `{0}` '
-                     ' instead)'.format(key.get('type') or 'secret'))
+        _assert_key_is_ssh_type(key)
     else:
         sys.exit('Key `{0}` not found'.format(key_name))
 
-    conn = key['value']['conn']
+    conn_info = key['value'].copy()
     ssh_key_path = key['value'].get('ssh_key_path')
     ssh_key = key['value'].get('ssh_key')
 
-    if ssh_key_path:
-        ssh_connect(ssh_key_path, conn)
+    if key['value'].get('ssh_key_path'):
+        ssh_connect(**conn_info)
     elif ssh_key:
-        fd, ssh_key_path = tempfile.mkstemp()
-        os.write(fd, ssh_key.encode('utf8'))
-        os.close(fd)
+        ssh_key_path = _write_ssh_key_to_file(ssh_key)
+        conn_info['ssh_key_path'] = ssh_key_path
         try:
-            ssh_connect(ssh_key_path, conn)
+            ssh_connect(**conn_info)
         finally:
             os.remove(ssh_key_path)
+    # else cannot be since there's a "schema" validation on the key
+    # that verifies it provides either a key or a key path.
+
+
+def _write_ssh_key_to_file(ssh_key):
+    fd, ssh_key_path = tempfile.mkstemp()
+    os.write(fd, ssh_key.encode('utf8'))
+    os.close(fd)
+    return ssh_key_path
+
+
+def _assert_key_is_ssh_type(key):
+    if not key.get('type') == 'ssh':
+        sys.exit(
+            'Must provide key of type `ssh` (provided `{0}` instead)'.format(
+                key.get('type') or 'secret'))
