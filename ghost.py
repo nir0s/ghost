@@ -1593,28 +1593,10 @@ def ssh(key_name, stash, passphrase, backend):
     `KEY_NAME` is the key to use.
     """
     # TODO: find_executable or raise
-    def ssh_connect(ssh_key_path, conn, **kwargs):
-        bastion = kwargs.get('bastion')
-        bastion_key = kwargs.get('bastion_key')
-
+    def execute(command):
         try:
-            if not bastion:
-                click.echo('Connecting to {0}...'.format(conn))
-                subprocess.check_call(['ssh', conn, '-i', ssh_key_path])
-            else:
-                click.echo('Connecting to {0} via {1}...'.format(
-                    conn, bastion))
-                _, _host = conn.split('@')
-                hp = _host.split(':')
-                host, port = (hp[0], hp[1]) if len(hp) == 2 else (hp[0], '22')
-                idf = 'IdentityFile="{0}"'.format(bastion_key)
-                proxy = 'ProxyCommand="ssh -i {0} {1} nc {2} {3}"'.format(
-                    bastion_key or ssh_key_path, bastion, host, port)
-                command = ['/usr/bin/ssh', '-o', idf, '-o', proxy, conn]
-                click.echo('Executing : {0}'.format(
-                    ' '.join(['/usr/bin/ssh', '-o', idf, '-o', proxy, conn])))
-                subprocess.check_call(' '.join(command), shell=True)
-
+            click.echo('Executing: {0}'.format(' '.join(command)))
+            subprocess.check_call(' '.join(command), shell=True)
         except subprocess.CalledProcessError:
             sys.exit(1)
 
@@ -1627,27 +1609,61 @@ def ssh(key_name, stash, passphrase, backend):
         sys.exit('Key `{0}` not found'.format(key_name))
 
     conn_info = key['value'].copy()
-    ssh_key_path = key['value'].get('ssh_key_path')
-    ssh_key = key['value'].get('ssh_key')
+    ssh_key_path = conn_info.get('ssh_key_path')
+    ssh_key = conn_info.get('ssh_key')
 
-    if key['value'].get('ssh_key_path'):
-        ssh_connect(**conn_info)
+    resolved_path = _write_to_tmp_file(ssh_key) if ssh_key else ssh_key_path
+    ssh_command = _build_connection_command(conn_info)
+    if ssh_key_path:
+        execute(ssh_command)
     elif ssh_key:
-        ssh_key_path = _write_ssh_key_to_file(ssh_key)
         conn_info['ssh_key_path'] = ssh_key_path
         try:
-            ssh_connect(**conn_info)
+            execute(ssh_command)
         finally:
-            os.remove(ssh_key_path)
+            if resolved_path != ssh_key_path:
+                os.remove(ssh_key_path)
     # else cannot be since there's a "schema" validation on the key
     # that verifies it provides either a key or a key path.
 
 
-def _write_ssh_key_to_file(ssh_key):
-    fd, ssh_key_path = tempfile.mkstemp()
-    os.write(fd, ssh_key.encode('utf8'))
+def _build_proxy_command(conn_info):
+    bastion = conn_info.get('bastion')
+    bastion_key = conn_info.get('bastion_key')
+    conn = conn_info['conn']
+    _, _host = conn.split('@')
+    hp = _host.split(':')
+    host, port = (hp[0], hp[1]) if len(hp) == 2 else (hp[0], '22')
+    idf = '-o IdentityFile="{0}"'.format(bastion_key)
+    proxy = '-o ProxyCommand="ssh -i {0} {1} nc {2} {3}"'.format(
+        bastion_key or conn_info['ssh_key_path'], bastion, host, port)
+    return [proxy, idf]
+
+
+def _build_connection_command(conn_info):
+    """
+    IndetityFile="~/.ssh/id_rsa"
+    ProxyCommand="ssh -i ~/.ssh/id_rsa BASTION_IP nc HOST_IP HOST_PORT"
+    """
+    ignored = ['ssh_key_path', 'ssh_key', 'bastion', 'bastion_key', 'conn']
+    command = ['ssh', '-i', conn_info['ssh_key_path'], conn_info['conn']]
+
+    bastion = conn_info.get('bastion')
+    if bastion:
+        command.extend(_build_proxy_command(conn_info))
+
+    for key, value in conn_info.items():
+        if key not in ignored:
+            command.append('-o {0}="{1}"'.format(key, value.strip('"\'')))
+    # raise Exception(command)
+    return command
+
+
+def _write_to_tmp_file(content):
+    fd, temp_file_path = tempfile.mkstemp()
+    os.write(fd, content.encode('utf8'))
     os.close(fd)
-    return ssh_key_path
+    return temp_file_path
 
 
 def _assert_key_is_ssh_type(key):
