@@ -1223,8 +1223,12 @@ def _print_command(cmd):
     raise RuntimeError('CMD: {0}'.format(cmd))
 
 
-def _raise_subprocess_call_error(cmd):
+def _mock_subprocess_check_call(cmd):
     raise subprocess.CalledProcessError(1, cmd)
+
+
+def _mock_write_passphrase_file(passphrase):
+    raise OSError('Expected OSError')
 
 
 class TestCLI:
@@ -1248,9 +1252,26 @@ class TestCLI:
         assert result.exit_code == 0
 
     @pytest.mark.skipif(os.name == 'nt', reason='Irrelevant on Windows')
-    def test_init_permission_denied(self, test_cli_stash):
-        result = _invoke('init_stash "{0}" -p {1}'.format(
-            '/x', test_cli_stash.passphrase))
+    @mock.patch('ghost._write_passphrase_file', _mock_write_passphrase_file)
+    def test_init_permission_denied_on_passphrase(self):
+        fd, temp_file = tempfile.mkstemp()
+        os.close(fd)
+        os.remove(temp_file)
+        result = _invoke('init_stash "{0}" -p whatever'.format(temp_file))
+        assert 'Expected OSError' in str(result.exception)
+        assert 'Removing stale stash and passphrase' in str(result.output)
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        # Since the invocation process both creates and deletes the stash
+        # in case of failure, there's no way to verify that the file
+        # exists in the middle of the test. This is a reasonable assumption
+        # though as otherwise the removal statement will not be covered.
+        assert not os.path.isfile(temp_file)
+
+    @pytest.mark.skipif(os.name == 'nt', reason='Irrelevant on Windows')
+    def test_init_permission_denied_on_stash(self, test_cli_stash):
+        result = _invoke('init_stash "/x" -p {0}'.format(
+            test_cli_stash.passphrase))
         assert 'Permission denied' in str(result.exception)
         assert type(result.exception) == SystemExit
         assert result.exit_code == 1
@@ -1528,7 +1549,7 @@ class TestCLI:
         assert '/path/to/key' in str(result.exception)
 
     # @pytest.mark.skipif(os.environ.get('CI') is None, reason='Because I can')
-    @mock.patch('ghost.subprocess.check_call', _raise_subprocess_call_error)
+    @mock.patch('ghost.subprocess.check_call', _mock_subprocess_check_call)
     def test_ssh_failed(self, test_cli_stash):
         _invoke("put_key server conn='ubuntu@10.10.1.10' "
                 "ssh_key_path='/path/to/key' -t ssh")
