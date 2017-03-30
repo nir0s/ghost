@@ -1265,6 +1265,15 @@ class TestCLI:
         result = _invoke('put_key aws key=value -p {0}'.format('bad'))
         self._assert_bad_passphrase(result)
 
+    @pytest.mark.skipif(os.name == 'nt', reason='TODO why fails on nt')
+    def test_put_not_initialized(self):
+        # TODO: test this on all backends
+        # TODO: check on windows if bad passphrase is provided
+        result = _invoke('put_key aws key=value')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert 'Stash not initialized' in result.output
+
     def test_put_no_modify(self, test_cli_stash):
         _invoke('put_key aws key=value')
         result = _invoke('put_key aws key=value')

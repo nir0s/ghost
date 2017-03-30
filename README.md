@@ -16,6 +16,7 @@ To that end, ghost supports file based backends like TinyDB and SQLite. Using ot
 
 Currently, ghost supports authenticating only via a passphrase. Authenticating via KMS, GitHub and the likes, might be supported in the future.
 
+Note that beginning with v0.6.1, Python 2.6 is no longer provided.
 
 ## Alternatives
 
@@ -32,7 +33,7 @@ Currently, ghost supports authenticating only via a passphrase. Authenticating v
 
 ## Installation
 
-Ghost supports Linux, Windows and OSX on Python 2.6, 2.7 and 3.3+
+Ghost supports Linux, Windows and OSX on Python 2.7 and 3.3+
 
 ```shell
 pip install ghost
