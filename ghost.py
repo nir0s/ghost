@@ -52,6 +52,7 @@ try:
                             PickleType,
                             create_engine,
                             sql)
+    from sqlalchemy_utils import database_exists, create_database
     SQLALCHEMY_EXISTS = True
 except ImportError:
     SQLALCHEMY_EXISTS = False
@@ -249,7 +250,7 @@ class Stash(object):
             if not value and not existing_key.get('value'):
                 raise GhostError('You must provide a value for new keys')
 
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
         self._validate_key_schema(value, key_type)
         if value and encrypt and not isinstance(value, dict):
             raise GhostError('Value must be of type dict')
@@ -304,7 +305,7 @@ class Stash(object):
     def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
         """
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         key = self._storage.get(key_name).copy()
         if not key.get('value'):
@@ -327,7 +328,7 @@ class Stash(object):
              key_type=None):
         """Return a list of all keys.
         """
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         key_list = [k for k in self._storage.list()
                     if k['name'] != 'stored_passphrase' and
@@ -358,7 +359,7 @@ class Stash(object):
     def delete(self, key_name):
         """Delete a key if it exists.
         """
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         if key_name == 'stored_passphrase':
             raise GhostError(
@@ -385,7 +386,7 @@ class Stash(object):
             raise GhostError('Failed to delete {0}'.format(key_name))
 
     def _change_lock_state(self, key_name, lock):
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         if not self.get(key_name):
             raise GhostError('Key `{0}` not found'.format(key_name))
@@ -417,7 +418,7 @@ class Stash(object):
     def purge(self, force=False, key_type=None):
         """Purge the stash from all keys
         """
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         if not force:
             raise GhostError(
@@ -436,7 +437,7 @@ class Stash(object):
     def export(self, output_path=None, decrypt=False):
         """Export all keys in the stash to a list or a file
         """
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         all_keys = []
         for key in self.list():
@@ -461,7 +462,7 @@ class Stash(object):
         If `force` is true, existing keys will be overwriten.
         """
         # TODO: Handle keys not dict or key_file not json
-        self._assert_valid_passphrase()
+        self._assert_valid_stash()
 
         if not keys and not key_file or (keys and key_file):
             raise GhostError(
@@ -537,8 +538,11 @@ class Stash(object):
                 .format(key_name))
         return existing_key
 
-    def _assert_valid_passphrase(self):
-        if self._storage.is_initialized:
+    def _assert_valid_stash(self):
+        if not self._storage.is_initialized:
+            raise GhostError(
+                'Stash not initialized. Please initialize it and try again')
+        else:
             try:
                 key = self._storage.get('stored_passphrase')
                 if key:
@@ -586,6 +590,8 @@ class TinyDBStorage(object):
         dirname = os.path.dirname(self.db_path)
         if dirname and not os.path.isdir(dirname):
             os.makedirs(os.path.dirname(self.db_path))
+        if not os.path.isfile(self.db_path):
+            open(self.db_path, 'w').close()
 
     @property
     def is_initialized(self):
@@ -686,11 +692,12 @@ class SQLAlchemyStorage(object):
 
     def init(self):
         if self._local_path:
-            # TODO: Test branching. Remote isn't tested.
             dirname = os.path.dirname(self._local_path)
             if dirname and not os.path.isdir(dirname):
                 os.makedirs(dirname)
 
+        if not database_exists(self.db.url):
+            create_database(self.db.url)
         # More on connection strings for sqlalchemy:
         # http://docs.sqlalchemy.org/en/latest/core/engines.html
         self.metadata.bind = self.db
@@ -698,7 +705,7 @@ class SQLAlchemyStorage(object):
 
     @property
     def is_initialized(self):
-        return os.path.isfile(self._local_path) if self._local_path else True
+        return database_exists(self.db.url)
 
     def put(self, key):
         return self.db.execute(self.keys.insert(), **key).lastrowid

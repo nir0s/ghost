@@ -4,8 +4,6 @@ matrix:
   include:
     - env: TOX_ENV=flake8
     - env: TOX_ENV=py3flake8
-    - python: 2.6 # these are just to make travis's UI a bit prettier
-      env: TOX_ENV=py26
     - python: 2.7
       env: TOX_ENV=py27
     - python: 3.3

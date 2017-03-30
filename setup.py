@@ -30,12 +30,11 @@ setup(
     extras_require={
         'vault': ['hvac>=0.2.16'],
         'consul': ['requests>=2.11.1'],
-        'sqlalchemy': ['sqlalchemy>=1.0.15'],
+        'sqlalchemy': ['sqlalchemy>=1.0.15', 'sqlalchemy-utils>=0.32.14'],
         'elasticsearch': ['elasticsearch>=2.4.0']
     },
     classifiers=[
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
