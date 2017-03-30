@@ -1065,6 +1065,11 @@ def _get_stash(backend, path, passphrase, quiet=False):
     return stash
 
 
+def _write_passphrase_file(passphrase):
+    with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
+        passphrase_file.write(passphrase)
+
+
 CLICK_CONTEXT_SETTINGS = dict(
     help_option_names=['-h', '--help'],
     token_normalize_func=lambda param: param.lower())
@@ -1151,7 +1156,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     try:
         click.echo('Initializing stash...')
         if os.path.isfile(PASSPHRASE_FILENAME):
-            sys.exit(
+            raise GhostError(
                 '{0} already exists. Overwriting might prevent you '
                 'from accessing the stash it was generated for. '
                 'Please make sure to save and remove the file before '
@@ -1167,15 +1172,24 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
             click.echo('Stash already initialized.')
             sys.exit(0)
 
-        with open(PASSPHRASE_FILENAME, 'w') as passphrase_file:
-            passphrase_file.write(passphrase)
-    except (GhostError, IOError) as ex:
+        _write_passphrase_file(passphrase)
+    except GhostError as ex:
+        sys.exit(ex)
+    except (OSError, IOError) as ex:
+        click.echo("Seems like we've run into a problem.")
+        file_path = _parse_path_string(stash_path)['db_path']
+        click.echo(
+            'Removing stale stash and passphrase: {0}. Note that any '
+            'directories created are not removed for safety reasons and you '
+            'might want to remove them manually.'.format(file_path))
+        if os.path.isfile(file_path):
+            os.remove(file_path)
         sys.exit(ex)
 
     click.echo('Initialized stash at: {0}'.format(stash_path))
     click.echo(
         'Your passphrase can be found under the `{0}` file in the '
-        'current directory'.format(PASSPHRASE_FILENAME))
+        'current directory.'.format(PASSPHRASE_FILENAME))
     click.echo(
         'Make sure you save your passphrase somewhere safe. '
         'If lost, you will lose access to your stash.')
