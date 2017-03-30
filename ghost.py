@@ -183,6 +183,7 @@ class Stash(object):
         return False
 
     def _validate_key_schema(self, value, key_type):
+        # TODO: Replace with normal, jsonschema style validation
         # 'ssh': {
         #     'requires': ['conn'],
         #     'oneof': [['ssh_key_path', 'ssh_key']]
@@ -267,53 +268,45 @@ class Stash(object):
         # TODO: This should be refactored. `_handle_existing_key` deletes
         # the key rather implicitly. It shouldn't do that.
         # `existing_key` will be an empty dict if it doesn't exist
-        existing_key = self._handle_existing_key(name, modify or add)
-        assert_key_is_unlocked(existing_key)
-        assert_value_provided_for_new_key(value, existing_key)
+        key = self._handle_existing_key(name, modify or add)
+        assert_key_is_unlocked(key)
+        assert_value_provided_for_new_key(value, key)
 
+        new_key = dict(name=name, lock=lock)
         if value:
             # TODO: fix edge case in which encrypt is false and yet we might
             # try to add to an existing key. encrypt=false is only used when
             # `load`ing into a new stash, but someone might use it directly
             # from the API.
             if add:
-                value = self._update_existing_key(existing_key, value)
+                value = self._update_existing_key(key, value)
             if encrypt:
-                value = self._encrypt(value)
+                new_key['value'] = self._encrypt(value)
         else:
-            value = existing_key.get('value')
+            new_key['value'] = key.get('value')
 
         # TODO: Treat a case in which we try to update an existing key
         # but don't provide a value in which nothing will happen.
-        description = description or existing_key.get('description')
-        created_at = existing_key.get('created_at') or _get_current_time()
-        modified_at = _get_current_time()
-        metadata = metadata or existing_key.get('metadata')
-        uid = existing_key.get('uid') or str(uuid.uuid4())
-        key_type = key_type or existing_key.get('type')
+        new_key['description'] = description or key.get('description')
+        new_key['created_at'] = key.get('created_at') or _get_current_time()
+        new_key['modified_at'] = _get_current_time()
+        new_key['metadata'] = metadata or key.get('metadata')
+        new_key['uid'] = key.get('uid') or str(uuid.uuid4())
+        new_key['type'] = key.get('type') or key_type
 
-        key_id = self._storage.put(dict(
-            name=name,
-            value=value,
-            description=description,
-            created_at=created_at,
-            modified_at=modified_at,
-            metadata=metadata,
-            uid=uid,
-            lock=lock,
-            type=key_type))
+        key_id = self._storage.put(new_key)
 
         audit(
             storage=self._storage.db_path,
             action='MODIFY' if (modify or add) else 'PUT',
             message=json.dumps(dict(
-                key_name=name,
+                key_name=new_key['name'],
                 value='HIDDEN',
-                description=description,
-                uid=uid,
-                metadata=json.dumps(metadata),
-                lock=lock,
-                type=key_type)))
+                description=new_key['description'],
+                uid=new_key['uid'],
+                metadata=json.dumps(new_key['metadata']),
+                lock=new_key['lock'],
+                type=new_key['type'])))
 
         return key_id
 
@@ -1140,7 +1133,7 @@ backend_option = click.option(
     '`GHOST_BACKEND_TYPE` env var)')
 
 
-@main.command(name='init', short_help='Init a stash')
+@main.command(name='init', short_help='Initialize a stash')
 @click.argument('STASH_PATH', required=False, type=click.STRING)
 @click.option('-p',
               '--passphrase',
@@ -1269,7 +1262,7 @@ def put_key(key_name,
     stash = _get_stash(backend, stash, passphrase)
 
     try:
-        click.echo('Stashing key...')
+        click.echo('Stashing {0} key...'.format(key_type))
         stash.put(
             name=key_name,
             value=_build_dict_from_key_value(value),
@@ -1579,7 +1572,7 @@ def migrate_stash(source_stash_path,
     click.echo('Migration complete!')
 
 
-@main.command(name='ssh', short_help='Use a key to connect to a machine')
+@main.command(name='ssh', short_help='Use a key to SSH-connect to a machine')
 @click.argument('KEY_NAME')
 @stash_option
 @passphrase_option
@@ -1604,69 +1597,75 @@ def ssh(key_name, stash, passphrase, backend):
     key = stash.get(key_name)
 
     if key:
-        _assert_key_is_ssh_type(key)
+        _assert_is_ssh_type_key(key)
     else:
         sys.exit('Key `{0}` not found'.format(key_name))
 
-    conn_info = key['value'].copy()
+    conn_info = key['value']
     ssh_key_path = conn_info.get('ssh_key_path')
     ssh_key = conn_info.get('ssh_key')
+    proxy_key_path = conn_info.get('proxy_key_path')
+    proxy_key = conn_info.get('proxy_key')
 
-    resolved_path = _write_to_tmp_file(ssh_key) if ssh_key else ssh_key_path
-    ssh_command = _build_connection_command(conn_info)
-    if ssh_key_path:
+    id_file = _write_tmp(ssh_key) if ssh_key else ssh_key_path
+    conn_info['ssh_key_path'] = id_file
+
+    if conn_info.get('proxy'):
+        proxy_id_file = _write_tmp(proxy_key) if proxy_key else proxy_key_path
+        conn_info['proxy_key_path'] = proxy_id_file
+
+    ssh_command = _build_ssh_command(conn_info)
+    try:
         execute(ssh_command)
-    elif ssh_key:
-        conn_info['ssh_key_path'] = ssh_key_path
-        try:
-            execute(ssh_command)
-        finally:
-            if resolved_path != ssh_key_path:
-                os.remove(ssh_key_path)
-    # else cannot be since there's a "schema" validation on the key
-    # that verifies it provides either a key or a key path.
+    finally:
+        # If they're not equal, that means we've created a temp one which
+        # should be deleted, else, it's a path to an existing key file.
+        if id_file != ssh_key_path:
+            click.echo('Removing temp ssh key file: {0}...'.format(id_file))
+            os.remove(id_file)
+        if conn_info.get('proxy') and proxy_id_file != proxy_key_path:
+            click.echo('Removing temp proxy key file: {0}...'.format(
+                proxy_id_file))
+            os.remove(proxy_id_file)
 
 
 def _build_proxy_command(conn_info):
-    bastion = conn_info.get('bastion')
-    bastion_key = conn_info.get('bastion_key')
+    proxy = conn_info.get('proxy')
+    proxy_key_path = conn_info.get('proxy_key_path')
+
     conn = conn_info['conn']
     _, _host = conn.split('@')
     hp = _host.split(':')
     host, port = (hp[0], hp[1]) if len(hp) == 2 else (hp[0], '22')
-    idf = '-o IdentityFile="{0}"'.format(bastion_key)
+
+    idf = '-o IdentityFile="{0}"'.format(proxy_key_path)
     proxy = '-o ProxyCommand="ssh -i {0} {1} nc {2} {3}"'.format(
-        bastion_key or conn_info['ssh_key_path'], bastion, host, port)
+        proxy_key_path or conn_info['ssh_key_path'], proxy, host, port)
     return [proxy, idf]
 
 
-def _build_connection_command(conn_info):
+def _build_ssh_command(conn_info):
     """
     IndetityFile="~/.ssh/id_rsa"
-    ProxyCommand="ssh -i ~/.ssh/id_rsa BASTION_IP nc HOST_IP HOST_PORT"
+    ProxyCommand="ssh -i ~/.ssh/id_rsa proxy_IP nc HOST_IP HOST_PORT"
     """
-    ignored = ['ssh_key_path', 'ssh_key', 'bastion', 'bastion_key', 'conn']
     command = ['ssh', '-i', conn_info['ssh_key_path'], conn_info['conn']]
 
-    bastion = conn_info.get('bastion')
-    if bastion:
+    if conn_info.get('proxy'):
         command.extend(_build_proxy_command(conn_info))
-
-    for key, value in conn_info.items():
-        if key not in ignored:
-            command.append('-o {0}="{1}"'.format(key, value.strip('"\'')))
-    # raise Exception(command)
+    if conn_info.get('extend'):
+        command.append(conn_info.get('extend'))
     return command
 
 
-def _write_to_tmp_file(content):
+def _write_tmp(content):
     fd, temp_file_path = tempfile.mkstemp()
     os.write(fd, content.encode('utf8'))
     os.close(fd)
     return temp_file_path
 
 
-def _assert_key_is_ssh_type(key):
+def _assert_is_ssh_type_key(key):
     if not key.get('type') == 'ssh':
         sys.exit(
             'Must provide key of type `ssh` (provided `{0}` instead)'.format(
