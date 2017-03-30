@@ -1238,11 +1238,11 @@ def test_cli_stash(stash_path):
         pass
 
 
-def _print_command(cmd):
+def _print_command(cmd, shell):
     raise RuntimeError('CMD: {0}'.format(cmd))
 
 
-def _mock_subprocess_check_call(cmd):
+def _mock_subprocess_check_call(cmd, shell):
     raise subprocess.CalledProcessError(1, cmd)
 
 
@@ -1577,10 +1577,8 @@ class TestCLI:
         _invoke("put_key server conn='ubuntu@10.10.1.10' "
                 "ssh_key_path='/path/to/key' -t ssh")
         result = _invoke('ssh server')
-        assert 'ssh' in str(result.exception)
-        assert 'ubuntu@10.10.1.10' in str(result.exception)
-        assert '-i' in str(result.exception)
-        assert '/path/to/key' in str(result.exception)
+        expected_command = 'ssh -i /path/to/key ubuntu@10.10.1.10'
+        assert expected_command in str(result.exception)
 
     # @pytest.mark.skipif(os.environ.get('CI') is None, reason='Because I can')
     @mock.patch('ghost.subprocess.check_call', _mock_subprocess_check_call)
@@ -1602,6 +1600,40 @@ class TestCLI:
         result = _invoke('ssh server')
         assert type(result.exception) == SystemExit
         assert 'Key `server` not found' in result.output
+
+    @mock.patch('ghost.subprocess.check_call', _print_command)
+    def test_ssh_with_proxy_key_path(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' "
+                "ssh_key_path='/path/to/key' -t ssh "
+                "proxy='ubuntu@1.1.1.1' proxy_key_path='/path/to/proxy/key'")
+        result = _invoke('ssh server')
+        expected_command = (
+            'ssh -i /path/to/key ubuntu@10.10.1.10 '
+            '-o ProxyCommand="ssh -i /path/to/proxy/key ubuntu@1.1.1.1 '
+            'nc 10.10.1.10 22" -o IdentityFile="/path/to/proxy/key"'
+        )
+        assert expected_command in str(result.exception)
+
+    @mock.patch('ghost.subprocess.check_call', _print_command)
+    @pytest.mark.skipif(os.name == 'nt', reason='TODO')
+    def test_ssh_with_proxy_key(self, test_cli_stash):
+        _invoke("put_key server conn='ubuntu@10.10.1.10' "
+                "ssh_key_path='/path/to/key' -t ssh "
+                "proxy='ubuntu@1.1.1.1' proxy_key='123'")
+        result = _invoke('ssh server')
+        assert 'ssh -i /path/to/key ubuntu@10.10.1.10' in str(result.exception)
+        assert '-o ProxyCommand="ssh -i /tmp' in str(result.exception)
+        assert 'ubuntu@1.1.1.1 nc 10.10.1.10 22"' in str(result.exception)
+        assert '-o IdentityFile="/tmp/' in str(result.exception)
+
+    @mock.patch('ghost.subprocess.check_call', _print_command)
+    def test_ssh_with_key_path_and_extension(self, test_cli_stash):
+        _invoke("""put_key server conn='ubuntu@10.10.1.10'
+                ssh_key_path='/path/to/key' -t ssh extend='-o Key="Value"'""")
+        result = _invoke('ssh server')
+        expected_command = \
+            'ssh -i /path/to/key ubuntu@10.10.1.10 -o Key="Value"'
+        assert expected_command in str(result.exception)
 
 
 class TestMultiStash:
