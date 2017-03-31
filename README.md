@@ -129,6 +129,7 @@ $ ghost get gcp -j
 }
 
 # Modifying an existing key
+# `--add` can be used to add to a key while modify overwrites it.
 $ ghost put gcp token=my_modified_token --modify
 Stashing key...
 

@@ -214,7 +214,8 @@ class Stash(object):
             description='',
             encrypt=True,
             lock=False,
-            key_type='secret'):
+            key_type='secret',
+            add=False):
         """Put a key inside the stash
 
         if key exists and modify true: delete and create
@@ -238,6 +239,10 @@ class Stash(object):
         same goes for the `uid` which will be generated if it didn't
         previously exist.
 
+        `lock` will lock the key to prevent it from being modified or deleted
+
+        `add` allows to add values to an existing key instead of overwriting.
+
         Returns the id of the key in the database
         """
         def assert_key_is_unlocked(existing_key):
@@ -258,11 +263,17 @@ class Stash(object):
         # TODO: This should be refactored. `_handle_existing_key` deletes
         # the key rather implicitly. It shouldn't do that.
         # `existing_key` will be an empty dict if it doesn't exist
-        existing_key = self._handle_existing_key(name, modify)
+        existing_key = self._handle_existing_key(name, modify or add)
         assert_key_is_unlocked(existing_key)
         assert_value_provided_for_new_key(value, existing_key)
 
         if value:
+            # TODO: fix edge case in which encrypt is false and yet we might
+            # try to add to an existing key. encrypt=false is only used when
+            # `load`ing into a new stash, but someone might use it directly
+            # from the API.
+            if add:
+                value = self._update_existing_key(existing_key, value)
             if encrypt:
                 value = self._encrypt(value)
         else:
@@ -290,7 +301,7 @@ class Stash(object):
 
         audit(
             storage=self._storage.db_path,
-            action='MODIFY' if modify else 'PUT',
+            action='MODIFY' if (modify or add) else 'PUT',
             message=json.dumps(dict(
                 key_name=name,
                 value='HIDDEN',
@@ -301,6 +312,29 @@ class Stash(object):
                 type=key_type)))
 
         return key_id
+
+    def _update_existing_key(self, existing_key, value):
+        current_value = self._decrypt(existing_key.get('value')).copy()
+        # We update current_value with value to overwrite
+        # existing values if the user provided overriding values
+        current_value.update(value)
+        return current_value
+
+    def _handle_existing_key(self, key_name, modify):
+        existing_key = self._storage.get(key_name) or {}
+        if existing_key and modify:
+            # TODO: Consider replacing this with self.delete(key_name)
+            if not existing_key['lock']:
+                self._storage.delete(key_name)
+        elif existing_key:
+            raise GhostError(
+                'Key `{0}` already exists. Use the modify flag to overwrite'
+                .format(key_name))
+        elif modify:
+            raise GhostError(
+                "Key `{0}` doesn't exist and therefore cannot be modified"
+                .format(key_name))
+        return existing_key
 
     def get(self, key_name, decrypt=True):
         """Return a key with its parameters if it was found.
@@ -521,22 +555,6 @@ class Stash(object):
                 encrypted_value).decode('ascii')
         value = json.loads(jsonified_value)
         return value
-
-    def _handle_existing_key(self, key_name, modify):
-        existing_key = self._storage.get(key_name) or {}
-        if existing_key and modify:
-            # TODO: Consider replacing this with self.delete(key_name)
-            if not existing_key['lock']:
-                self._storage.delete(key_name)
-        elif existing_key:
-            raise GhostError(
-                'Key `{0}` already exists. Use the modify flag to overwrite'
-                .format(key_name))
-        elif modify:
-            raise GhostError(
-                "Key `{0}` doesn't exist and therefore cannot be modified"
-                .format(key_name))
-        return existing_key
 
     def _assert_valid_stash(self):
         if not self._storage.is_initialized:
@@ -1210,6 +1228,10 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
               '--modify',
               is_flag=True,
               help='Whether to modify an existing key if it exists')
+@click.option('-a',
+              '--add',
+              is_flag=True,
+              help='Whether to add values to an existing key if it exists')
 @click.option('--lock',
               is_flag=True,
               help='Set the key to be locked, preventing its deletion and '
@@ -1227,6 +1249,7 @@ def put_key(key_name,
             description,
             meta,
             modify,
+            add,
             lock,
             key_type,
             stash,
@@ -1250,7 +1273,8 @@ def put_key(key_name,
             metadata=_build_dict_from_key_value(meta),
             description=description,
             lock=lock,
-            key_type=key_type)
+            key_type=key_type,
+            add=add)
         click.echo('Key stashed successfully')
     except GhostError as ex:
         sys.exit(ex)

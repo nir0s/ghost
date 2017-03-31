@@ -957,11 +957,30 @@ class TestStash:
             test_stash.put('aws', {'key': 'value'}, modify=True)
         assert "therefore cannot be modified" in str(ex.value)
 
+    def test_put_add_nonexisting_key(self, test_stash):
+        with pytest.raises(ghost.GhostError) as ex:
+            test_stash.put('aws', {'key': 'value'}, modify=True)
+        assert "therefore cannot be modified" in str(ex.value)
+
     def test_put_existing_key_no_modify(self, test_stash):
         test_stash.put('aws', {'key': 'value'})
         with pytest.raises(ghost.GhostError) as ex:
             test_stash.put('aws', {'key': 'value'})
         assert "Use the modify flag to overwrite" in str(ex.value)
+
+    def test_put_add_to_existing_key(self, test_stash):
+        test_stash.put('aws', {'key': 'value'})
+        test_stash.put('aws', {'key2': 'value2'}, add=True)
+        key = test_stash.get('aws')
+        assert key['value'] == {'key': 'value', 'key2': 'value2'}
+        assert_in_log('MODIFY')
+
+    def test_put_add_to_existing_key_overwrite_value(self, test_stash):
+        test_stash.put('aws', {'key': 'value', 'key2': 'value2'})
+        test_stash.put('aws', {'key': 'value2'}, add=True)
+        key = test_stash.get('aws')
+        assert key['value'] == {'key': 'value2', 'key2': 'value2'}
+        assert_in_log('MODIFY')
 
     def test_get(self, test_stash):
         def _test_key(key):
@@ -1295,7 +1314,7 @@ class TestCLI:
         assert result.exit_code == 1
         assert 'Stash not initialized' in result.output
 
-    def test_put_no_modify(self, test_cli_stash):
+    def test_put_no_modify_or_add(self, test_cli_stash):
         _invoke('put_key aws key=value')
         result = _invoke('put_key aws key=value')
         assert type(result.exception) == SystemExit
@@ -1309,6 +1328,12 @@ class TestCLI:
         assert result.exit_code == 1
         assert 'Key `aws` is locked' in result.output
         assert _invoke('get_key aws key').output.strip() == 'value'
+
+    def test_put_add_nonexisting_key(self, test_cli_stash):
+        result = _invoke('put_key aws key=value --add')
+        assert type(result.exception) == SystemExit
+        assert result.exit_code == 1
+        assert "Key `aws` doesn't exist" in result.output
 
     def test_get(self, test_cli_stash):
         _invoke('put_key aws key=value')
