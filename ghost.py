@@ -280,8 +280,7 @@ class Stash(object):
             # from the API.
             if add:
                 value = self._update_existing_key(key, value)
-            if encrypt:
-                new_key['value'] = self._encrypt(value)
+            new_key['value'] = self._encrypt(value) if encrypt else value
         else:
             new_key['value'] = key.get('value')
 
@@ -484,18 +483,17 @@ class Stash(object):
         else:
             raise GhostError('There are no keys to export')
 
-    def load(self, keys=None, key_file=None, encrypt=False):
+    def load(self, origin_passphrase, keys=None, key_file=None):
         """Import keys to the stash from either a list of keys or a file
 
         `keys` is a list of dictionaries created by `self.export`
         `stash_path` is a path to a file created by `self.export`
-
-        If `force` is true, existing keys will be overwriten.
         """
         # TODO: Handle keys not dict or key_file not json
         self._assert_valid_stash()
 
-        if not keys and not key_file or (keys and key_file):
+        # Check if both or none are provided (ahh, the mighty xor)
+        if not (bool(keys) ^ bool(key_file)):
             raise GhostError(
                 'You must either provide a path to an exported stash file '
                 'or a list of key dicts to import')
@@ -503,28 +501,34 @@ class Stash(object):
             with open(key_file) as stash_file:
                 keys = json.loads(stash_file.read())
 
+        # If the passphrases are the same, there's no reason to decrypt
+        # and re-encrypt. We can simply pass the value.
+        decrypt = origin_passphrase != self.passphrase
+        if decrypt:
+            # TODO: The fact that we need to create a stub stash just to
+            # decrypt means we should probably have some encryptor class.
+            stub = Stash(TinyDBStorage('stub'), origin_passphrase)
         # TODO: Handle existing keys when loading
         for key in keys:
             self.put(
                 name=key['name'],
-                value=key['value'],
+                value=stub._decrypt(key['value']) if decrypt else key['value'],
                 metadata=key['metadata'],
                 description=key['description'],
                 lock=key.get('lock'),
                 key_type=key.get('type'),
-                encrypt=encrypt)
+                encrypt=decrypt)
 
     @property
     def key(self):
-        if self._key is None:
-            passphrase = self.passphrase.encode('utf-8')
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=b'ghost',
-                iterations=self._iterations,
-                backend=default_backend())
-            self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
+        passphrase = self.passphrase.encode('utf-8')
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b'ghost',
+            iterations=self._iterations,
+            backend=default_backend())
+        self._key = base64.urlsafe_b64encode(kdf.derive(passphrase))
         return self._key
 
     @property
@@ -586,11 +590,10 @@ def migrate(src_path,
     dst_storage = STORAGE_MAPPING[dst_backend](**_parse_path_string(dst_path))
     src_stash = Stash(src_storage, src_passphrase)
     dst_stash = Stash(dst_storage, dst_passphrase)
-    # TODO: Test that re-encryption does not occur on similiar
+    # TODO: Test that re-encryption does not occur on similar
     # passphrases
-    similiar_passphrase = src_passphrase == dst_passphrase
-    keys = src_stash.export(decrypt=not similiar_passphrase)
-    dst_stash.load(keys=keys, encrypt=not similiar_passphrase)
+    keys = src_stash.export()
+    dst_stash.load(src_passphrase, keys=keys)
 
 
 class TinyDBStorage(object):
@@ -1509,10 +1512,12 @@ def export_keys(output_path, stash, passphrase, backend):
 
 @main.command(name='load')
 @click.argument('KEY_FILE')
+@click.option('--origin-passphrase',
+              help='The passphrase of the origin stash')
 @stash_option
 @passphrase_option
 @backend_option
-def load_keys(key_file, stash, passphrase, backend):
+def load_keys(key_file, origin_passphrase, stash, passphrase, backend):
     """Load all keys from an exported key file to the stash
 
     `KEY_FILE` is the exported stash file to load keys from
@@ -1520,7 +1525,7 @@ def load_keys(key_file, stash, passphrase, backend):
     stash = _get_stash(backend, stash, passphrase)
 
     click.echo('Importing all keys from {0}...'.format(key_file))
-    stash.load(key_file=key_file)
+    stash.load(origin_passphrase, key_file=key_file)
     click.echo('Import complete!')
 
 

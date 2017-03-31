@@ -1079,7 +1079,7 @@ class TestStash:
         keys = test_stash.export()
         assert keys[0]['name'] == 'aws'
         test_stash.purge(force=True)
-        test_stash.load(keys, encrypt=False)
+        test_stash.load(test_stash.passphrase, keys)
         key_list = test_stash.list()
         assert len(key_list) == 1
         assert 'aws' in key_list
@@ -1091,14 +1091,14 @@ class TestStash:
         test_stash.purge(force=True)
         keys = test_stash.list()
         assert len(keys) == 0
-        test_stash.load(key_file=temp_file_path)
+        test_stash.load(test_stash.passphrase, key_file=temp_file_path)
         key_list = test_stash.list()
         assert len(key_list) == 1
         assert 'aws' in key_list
 
     def test_load_no_keys_no_file_provided(self, test_stash):
         with pytest.raises(ghost.GhostError) as ex:
-            test_stash.load()
+            test_stash.load('stub_passphrase')
         assert 'You must either provide a path to an exported' in str(ex.value)
 
     def test_migrate(self, test_stash, temp_file_path):
@@ -1114,6 +1114,12 @@ class TestStash:
         assert 'aws' in destination_stash.list()
         assert 'gcp' in destination_stash.list()
         assert 'openstack' in destination_stash.list()
+        # Verify that not only were the keys loaded, their values are correct.
+        # To understand why the two indices of the lists below make sense,
+        # see _create_migration_env where the keys are put.
+        example_src_key = test_stash.get(test_stash.list()[0])
+        example_dst_key = destination_stash.get(destination_stash.list()[1])
+        assert example_src_key['value'] == example_dst_key['value']
 
     # TODO: Test lock here also
     def test_lock_an_already_locked_key(self, test_stash):
@@ -1483,7 +1489,8 @@ class TestCLI:
         _invoke('purge_stash -f')
         result = _invoke('list_keys -j')
         assert json.loads(result.output.strip('\n')) == []
-        _invoke('load_keys "{0}"'.format(temp_file_path))
+        _invoke('load_keys "{0}" --origin-passphrase {1}'.format(
+            temp_file_path, test_cli_stash.passphrase))
         result = _invoke('list_keys -j')
         assert json.loads(result.output) == key_list
 
