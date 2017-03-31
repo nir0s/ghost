@@ -1573,6 +1573,11 @@ class TestCLI:
         assert type(result.exception) == SystemExit
         assert 'Must provide key of type `ssh`' in result.output
 
+    def test_ssh_non_existing_key(self, test_cli_stash):
+        result = _invoke('ssh server')
+        assert type(result.exception) == SystemExit
+        assert 'Key `server` not found' in result.output
+
 
 class TestMultiStash:
     # TODO: Test that migrate works when using multi-stash mode

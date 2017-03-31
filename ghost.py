@@ -1338,26 +1338,26 @@ def get_key(key_name,
     stash = _get_stash(backend, stash, passphrase, quiet=jsonify or value_name)
 
     try:
-        record = stash.get(key_name=key_name, decrypt=not no_decrypt)
+        key = stash.get(key_name=key_name, decrypt=not no_decrypt)
     except GhostError as ex:
         sys.exit(ex)
 
-    if not record:
+    if not key:
         sys.exit('Key `{0}` not found'.format(key_name))
     if value_name:
-        record = record['value'].get(value_name)
-        if not record:
+        key = key['value'].get(value_name)
+        if not key:
             sys.exit(
                 'Value name `{0}` could not be found under key `{1}`'.format(
                     value_name, key_name))
 
     if jsonify or value_name:
         click.echo(
-            json.dumps(record, indent=4, sort_keys=False).strip('"'),
+            json.dumps(key, indent=4, sort_keys=False).strip('"'),
             nl=True)
     else:
         click.echo('Retrieving key...')
-        click.echo('\n' + _prettify_dict(record))
+        click.echo('\n' + _prettify_dict(key))
 
 
 @main.command(name='delete', short_help='Delete a key from the stash')
@@ -1574,10 +1574,12 @@ def ssh(key_name, stash, passphrase, backend):
 
     stash = _get_stash(backend, stash, passphrase)
     key = stash.get(key_name)
-    if not key.get('type') == 'ssh':
-        sys.exit(
-            'Must provide key of type `ssh` (provided `{0}` instead)'.format(
-                key.get('type') or 'secret'))
+    if key:
+        if not key.get('type') == 'ssh':
+            sys.exit('Must provide key of type `ssh` (provided `{0}` '
+                     ' instead)'.format(key.get('type') or 'secret'))
+    else:
+        sys.exit('Key `{0}` not found'.format(key_name))
 
     conn = key['value']['conn']
     ssh_key_path = key['value'].get('ssh_key_path')
