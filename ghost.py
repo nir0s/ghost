@@ -1213,7 +1213,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
         'If lost, you will lose access to your stash.')
 
 
-@main.command(name='put', short_help='Insert a key to the stash')
+@main.command(name='put', short_help='Insert a new key')
 @click.argument('KEY_NAME')
 @click.argument('VALUE', nargs=-1, required=True)
 @click.option('-d',
@@ -1326,7 +1326,7 @@ def unlock_key(key_name,
         sys.exit(ex)
 
 
-@main.command(name='get', short_help='Retrieve a key from the stash')
+@main.command(name='get', short_help='Retrieve a key')
 @click.argument('KEY_NAME')
 @click.argument('VALUE_NAME', required=False)
 @click.option('-j',
@@ -1384,7 +1384,7 @@ def get_key(key_name,
         click.echo('\n' + _prettify_dict(key))
 
 
-@main.command(name='delete', short_help='Delete a key from the stash')
+@main.command(name='delete', short_help='Delete a key')
 @click.argument('KEY_NAME')
 @stash_option
 @passphrase_option
@@ -1465,7 +1465,7 @@ def list_keys(key_name,
         click.echo(_prettify_list(keys))
 
 
-@main.command(name='purge')
+@main.command(name='purge', short_help='Purge all keys')
 @click.option('-f',
               '--force',
               required=True,
@@ -1510,7 +1510,7 @@ def export_keys(output_path, stash, passphrase, backend):
         sys.exit(ex)
 
 
-@main.command(name='load')
+@main.command(name='load', short_help='Load keys from backup')
 @click.argument('KEY_FILE')
 @click.option('--origin-passphrase',
               help='The passphrase of the origin stash')
@@ -1529,7 +1529,8 @@ def load_keys(key_file, origin_passphrase, stash, passphrase, backend):
     click.echo('Import complete!')
 
 
-@main.command(name='migrate')
+@main.command(name='migrate',
+              short_help='Migrate keys from source to destination stash')
 @click.argument('SOURCE_STASH_PATH', type=click.STRING)
 @click.argument('DESTINATION_STASH_PATH', type=click.STRING)
 @click.option('-sp',

@@ -61,17 +61,17 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  delete   Delete a key from the stash
+  delete   Delete a key
   export   Export all keys to a file
-  get      Retrieve a key from the stash
-  init     Init a stash
-  list     List all keys in the stash If `KEY_NAME` is...
-  load     Load all keys from an exported key file to...
-  lock     Lock a key
-  migrate  Migrate all keys from a source stash to a...
-  purge    Purge the stash from all of its keys
-  put      Insert a key to the stash
-  ssh      Use an ssh type key to connect to a machine...
+  get      Retrieve a key
+  init     Initialize a stash
+  list     List keys
+  load     Load keys from backup
+  lock     Lock a key to protect it
+  migrate  Migrate keys from source to destination stash
+  purge    Purge all keys
+  put      Insert a new key
+  ssh      Use a key to SSH-connect to a machine
   unlock   Unlock a key
 
 
@@ -302,6 +302,21 @@ ubuntu@10.10.1.10:~$
 An added nicety is that you don't actually have to have key files stored on your file system, as ghost knows how to address (unlike the `ssh` executable) keys stored as strings. So instead of providing `ssh_key_path`, you could provide `ssh_key=...SSH_STRING...` and ghost will use that automatically.
 
 Note that ghost will force you to provide the `conn` and one of `ssh_key` or `ssh_key_path` values when using the `--type=ssh` key type.
+
+You can also use a ProxyCommand based `ssh` method to connect to a machine through a proxy:
+
+```bash
+$ ghost put machine-through-proxy --type ssh conn=ubuntu@10.10.1.10 key_file_path=~/.ssh/key.pem proxy=ubuntu@172.16.31.8 proxy_key_path=~/.ssh/my_proxy_key
+
+$ ghost ssh my-machine
+...
+
+```
+
+You can also use `proxy_key` to provide the string of the key instead of `ssh_key_path`.
+
+Additionally, any string put under the `extend` value in the key will be concatenated to the resulting ssh command.
+
 
 ## Purging a stash
 

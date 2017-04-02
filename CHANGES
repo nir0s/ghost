@@ -1,3 +1,17 @@
+**0.6.1** (2017.04.02)
+
+* Remove official Python2.6 support! Most things will probably work, but not guaranteed.
+* Add `ghost ssh` connecting through proxy using ProxyCommand.
+* Add `ghost put` `--add` flag to add values to an existing key.
+* Fix init in TinyDB and SqlAlchemy backends not idempotent.
+* Fix SqlAlchemy backend not creating a non-existing database on non-SQLite storage.
+* Allow to pass arbitrary directives to any ssh command via the `extend` value in an `ssh` type key.
+* Delete stale stash when initializing a stash without being able to write its passphrase file due to filesystem access errors.
+* Disallow using a stash before it is initialized.
+* Fix `ghost ssh` failing miserably on non-existing key.
+* Fix load not working due to it using the wrong passphrase.
+
+
 **0.6.0** (2017-03-26)
 
 * Allow to use multiple stashes on the same backend
