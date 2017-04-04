@@ -994,7 +994,7 @@ class ElasticsearchStorage(object):
 
 
 class DynamoDB(object):
-    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['mystorage'],
+    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['dynamodb'],
                  **backend_config):
         if not DYNAMODB_EXISTS:
             raise ImportError('mystorage must be installed first')
