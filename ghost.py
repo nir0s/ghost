@@ -999,7 +999,6 @@ class DynamoDB(object):
         if not DYNAMODB_EXISTS:
             raise ImportError('mystorage must be installed first')
         self.client = self._get_client(db_path, backend_config)
-    
 
 
 def _get_current_time():
