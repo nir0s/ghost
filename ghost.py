@@ -75,6 +75,13 @@ try:
 except ImportError:
     ES_EXISTS = False
 
+try:
+    import boto3
+
+    DYNAMODB_EXISTS = True
+except ImportError:
+    DYNAMODB_EXISTS = False
+
 
 GHOST_HOME = os.path.join(os.path.expanduser('~'), '.ghost')
 STORAGE_DEFAULT_PATH_MAPPING = {
@@ -986,6 +993,15 @@ class ElasticsearchStorage(object):
         return result['hits']['hits'] if result else {}
 
 
+class DynamoDB(object):
+    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['mystorage'],
+                 **backend_config):
+        if not DYNAMODB_EXISTS:
+            raise ImportError('mystorage must be installed first')
+        self.client = self._get_client(db_path, backend_config)
+    
+
+
 def _get_current_time():
     """Return a human readable unix timestamp formatted string
 
@@ -1099,7 +1115,8 @@ STORAGE_MAPPING = {
     'sqlalchemy': SQLAlchemyStorage,
     'consul': ConsulStorage,
     'vault': VaultStorage,
-    'elasticsearch': ElasticsearchStorage
+    'elasticsearch': ElasticsearchStorage,
+    'dynamodb': DynamoDB
 }
 
 

@@ -31,7 +31,8 @@ setup(
         'vault': ['hvac>=0.2.16'],
         'consul': ['requests>=2.11.1'],
         'sqlalchemy': ['sqlalchemy>=1.0.15', 'sqlalchemy-utils>=0.32.14'],
-        'elasticsearch': ['elasticsearch>=2.4.0']
+        'elasticsearch': ['elasticsearch>=2.4.0'],
+        'dynamodb': ['boto3']
     },
     classifiers=[
         'Programming Language :: Python',
