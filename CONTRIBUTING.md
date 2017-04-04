@@ -35,7 +35,7 @@ The constructor should, at the very least, receive a `db_path` argument represen
 
 ```python
 class MyStorage(object):
-    def __init__(db_path=STORAGE_DEFAULT_PATH_MAPPING['mystorage], 
+    def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['mystorage'],
                  **backend_config):
         if not MYSTORAGE_EXISTS:
             raise ImportError('mystorage must be installed first')
