@@ -1000,6 +1000,64 @@ class DynamoDB(object):
             raise ImportError('mystorage must be installed first')
         self.client = self._get_client(db_path, backend_config)
 
+    def init(self):
+        self.client.create()
+        self._configure_backend()
+
+    def put(self, key):
+        """Insert the key and return its database id
+        """
+        id = self.client.insert_key(key)
+        return id
+
+    def list(self):
+        """Return a list of all keys (not just key names, but rather the keys
+        themselves).
+
+        e.g.
+         {u'created_at': u'2016-10-10 08:31:53',
+          u'description': None,
+          u'metadata': None,
+          u'modified_at': u'2016-10-10 08:31:53',
+          u'name': u'aws',
+          u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
+          u'value': u'the_value'},
+         {u'created_at': u'2016-10-10 08:32:29',
+          u'description': u'my gcp token',
+          u'metadata': {u'owner': u'nir'},
+          u'modified_at': u'2016-10-10 08:32:29',
+          u'name': u'gcp',
+          u'uid': u'a51a0043-f241-4d52-93c1-266a3c5de15e',
+          u'value': u'the_value'}]
+
+        """
+        return self.client.list()
+
+    def get(self, key_name):
+        """Return a dictionary consisting of the key itself
+
+        e.g.
+        {u'created_at': u'2016-10-10 08:31:53',
+         u'description': None,
+         u'metadata': None,
+         u'modified_at': u'2016-10-10 08:31:53',
+         u'name': u'aws',
+         u'uid': u'459f12c0-f341-413e-9d7e-7410f912fb74',
+         u'value': u'the_value'}
+
+        """
+        key = self.client.get(key_name)
+        if not key:
+            return {}
+        return key
+
+    def delete(self, key_name):
+        """Delete the key and return true if the key was deleted, else false
+        """
+        self.client.delete(key_name)
+        key = self.get(key_name):
+        return key is {}
+
 
 def _get_current_time():
     """Return a human readable unix timestamp formatted string
