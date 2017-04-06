@@ -150,7 +150,7 @@ class Stash(object):
                  storage,
                  passphrase=None,
                  passphrase_size=12,
-                 iterations=1000000):
+                 iterations=100):
         self._storage = storage
         passphrase = passphrase or generate_passphrase(passphrase_size)
         self.passphrase = passphrase
@@ -1385,7 +1385,7 @@ def get_key(key_name,
 
 
 @main.command(name='delete', short_help='Delete a key')
-@click.argument('KEY_NAME')
+@click.argument('KEY_NAME', nargs=-1)
 @stash_option
 @passphrase_option
 @backend_option
@@ -1393,15 +1393,17 @@ def delete_key(key_name, stash, passphrase, backend):
     """Delete a key from the stash
 
     `KEY_NAME` is the name of the key to delete
+    You can provide that multiple times to delete multiple keys at once
     """
     stash = _get_stash(backend, stash, passphrase)
 
-    try:
-        click.echo('Deleting key...')
-        stash.delete(key_name=key_name)
-        click.echo('Key deleted successfully')
-    except GhostError as ex:
-        sys.exit(ex)
+    for key in key_name:
+        try:
+            click.echo('Deleting key {0}...'.format(key))
+            stash.delete(key_name=key)
+        except GhostError as ex:
+            sys.exit(ex)
+    click.echo('Keys deleted successfully')
 
 
 @main.command(name='list', short_help='List keys')
