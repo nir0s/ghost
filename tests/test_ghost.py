@@ -1401,6 +1401,18 @@ class TestCLI:
         assert len(db) == 1
         assert db['1']['name'] == 'stored_passphrase'
 
+    def test_delete_multiple_keys(self, test_cli_stash):
+        _invoke('put_key aws key=value')
+        _invoke('put_key gcp key=value')
+        db = get_tinydb(test_cli_stash._storage.db_path)
+        assert len(db) == 3
+        assert db['2']['name'] == 'aws'
+        assert db['3']['name'] == 'gcp'
+        _invoke('delete_key aws gcp')
+        db = get_tinydb(test_cli_stash._storage.db_path)
+        assert len(db) == 1
+        assert db['1']['name'] == 'stored_passphrase'
+
     def test_delete_bad_passphrase(self, test_cli_stash):
         result = _invoke('delete_key aws -p {0}'.format('bad'))
         self._assert_bad_passphrase(result)
