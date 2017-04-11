@@ -77,7 +77,6 @@ except ImportError:
 
 try:
     import boto3
-
     DYNAMODB_EXISTS = True
 except ImportError:
     DYNAMODB_EXISTS = False
@@ -997,7 +996,7 @@ class DynamoDB(object):
     def __init__(self, db_path=STORAGE_DEFAULT_PATH_MAPPING['dynamodb'],
                  **backend_config):
         if not DYNAMODB_EXISTS:
-            raise ImportError('mystorage must be installed first')
+            raise ImportError('dynamodb must be installed first')
         self.client = self._get_client(db_path, backend_config)
 
     def init(self):
