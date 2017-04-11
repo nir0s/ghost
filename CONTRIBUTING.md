@@ -133,7 +133,7 @@ def delete(self, key_name):
     """Delete the key and return true if the key was deleted, else false
     """
     self.client.delete(key_name)
-    key = self.get(key_name):
+    key = self.get(key_name)
     return key is {}
 ```
 
