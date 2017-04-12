@@ -111,6 +111,13 @@ KEY_FIELD_SCHEMA = {
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
+EXAMPLE_KEY = {
+    'name': 'example',
+    'value': {'key': 'value'},
+    'metadata': {'some_key': 'some_value'},
+    'description': 'This is the key description'
+}
+
 POTENTIAL_PASSPHRASE_LOCATIONS = [
     os.path.abspath(PASSPHRASE_FILENAME),
     os.path.join(GHOST_HOME, PASSPHRASE_FILENAME),
@@ -185,7 +192,8 @@ class Stash(object):
     @property
     def is_initialized(self):
         if self._storage.is_initialized:
-            self.passphrase = get_passphrase(self.passphrase)
+            if not self.passphrase:
+                self.passphrase = get_passphrase(self.passphrase)
             if self.get('stored_passphrase'):
                 return True
         return False
@@ -1263,7 +1271,6 @@ backend_option = click.option(
 
 
 @main.command(name='init', short_help='Initialize a stash')
-@click.argument('STASH_PATH', required=False, type=click.STRING)
 @click.option('-p',
               '--passphrase',
               default=None,
@@ -1275,7 +1282,14 @@ backend_option = click.option(
               default='tinydb',
               type=click.Choice(STORAGE_MAPPING.keys()),
               help='Storage backend for the stash')
-def init_stash(stash_path, passphrase, passphrase_size, backend):
+@click.option('-t',
+              '--tutorial',
+              is_flag=True,
+              help='Whether to create example key')
+@stash_option
+@passphrase_option
+@backend_option
+def init_stash(stash, passphrase, passphrase_size, backend, tutorial):
     r"""Init a stash
 
     `STASH_PATH` is the path to the storage endpoint. If this isn't supplied,
@@ -1293,7 +1307,7 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
 
     export GHOST_BACKEND='tinydb'
     """
-    stash_path = stash_path or STORAGE_DEFAULT_PATH_MAPPING[backend]
+    stash_path = stash or STORAGE_DEFAULT_PATH_MAPPING[backend]
     click.echo('Stash: {0} at {1}'.format(backend, stash_path))
     storage = STORAGE_MAPPING[backend](**_parse_path_string(stash_path))
 
@@ -1337,6 +1351,14 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     click.echo(
         'Make sure you save your passphrase somewhere safe. '
         'If lost, you will lose access to your stash.')
+
+    if tutorial:
+        stash.put(**EXAMPLE_KEY)
+        click.echo("TUTORIAL: \nFor your convenience we've stored an example "
+                   "key named 'example'. Usually this is done with 'ghost put "
+                   "example first_key=first_value [second_key=second_value "
+                   "[...]]'. You may retrieve it with 'ghost get example'. You"
+                   " may also delete it with 'ghost delete example'.")
 
 
 @main.command(name='put', short_help='Insert a new key')
