@@ -103,6 +103,13 @@ KEY_FIELD_SCHEMA = {
 
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
+EXAMPLE_KEY = {
+    'name': 'example',
+    'value': {'key': 'value'},
+    'metadata': {'some_key': 'some_value'},
+    'description': 'This is the key description'
+}
+
 POTENTIAL_PASSPHRASE_LOCATIONS = [
     os.path.abspath(PASSPHRASE_FILENAME),
     os.path.join(GHOST_HOME, PASSPHRASE_FILENAME),
@@ -1211,6 +1218,13 @@ def init_stash(stash_path, passphrase, passphrase_size, backend):
     click.echo(
         'Make sure you save your passphrase somewhere safe. '
         'If lost, you will lose access to your stash.')
+    # Creates an example key
+    stash.put(**EXAMPLE_KEY)
+    click.echo("TUTORIAL: \nFor your convenience we've stored an example key "
+               "named 'example'. Usually this is done with 'ghost put example "
+               "first_key=first_value [second_key=second_value [...]]'. You "
+               "may retrieve it with 'ghost get example'. You may also delete "
+               "it with 'ghost delete example'.")
 
 
 @main.command(name='put', short_help='Insert a new key')
