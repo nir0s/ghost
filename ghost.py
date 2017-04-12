@@ -1540,6 +1540,7 @@ def load_keys(key_file, origin_passphrase, stash, passphrase, backend):
               help='Path to the source stash')
 @click.option('-sb',
               '--source-backend',
+              default='tinydb',
               type=click.Choice(STORAGE_MAPPING.keys()),
               help='Storage backend for the stash')
 @click.option('-dp',
@@ -1549,6 +1550,7 @@ def load_keys(key_file, origin_passphrase, stash, passphrase, backend):
               help='Path to the destination stash')
 @click.option('-db',
               '--destination-backend',
+              default='tinydb',
               type=click.Choice(STORAGE_MAPPING.keys()),
               help='Storage backend for the stash')
 def migrate_stash(source_stash_path,
