@@ -1580,16 +1580,22 @@ def migrate_stash(source_stash_path,
 
 @main.command(name='ssh', short_help='Use a key to SSH-connect to a machine')
 @click.argument('KEY_NAME')
+@click.option('--no-tunnel',
+              is_flag=True,
+              help="Don't tunnel if a tunnel is configured in the key")
 @stash_option
 @passphrase_option
 @backend_option
-def ssh(key_name, stash, passphrase, backend):
+def ssh(key_name, no_tunnel, stash, passphrase, backend):
     """Use an ssh type key to connect to a machine via ssh
 
     Note that trying to use a key of the wrong type (e.g. `secret`)
     will result in an error.
 
     `KEY_NAME` is the key to use.
+
+    For additional information on the different configuration options
+    for an ssh type key, see the repo's readme.
     """
     # TODO: find_executable or raise
     def execute(command):
@@ -1620,7 +1626,7 @@ def ssh(key_name, stash, passphrase, backend):
         proxy_id_file = _write_tmp(proxy_key) if proxy_key else proxy_key_path
         conn_info['proxy_key_path'] = proxy_id_file
 
-    ssh_command = _build_ssh_command(conn_info)
+    ssh_command = _build_ssh_command(conn_info, no_tunnel)
     try:
         execute(ssh_command)
     finally:
@@ -1650,13 +1656,20 @@ def _build_proxy_command(conn_info):
     return [proxy, idf]
 
 
-def _build_ssh_command(conn_info):
+def _build_ssh_command(conn_info, no_tunnel=False):
     """
+    # TODO: Document clearly
     IndetityFile="~/.ssh/id_rsa"
     ProxyCommand="ssh -i ~/.ssh/id_rsa proxy_IP nc HOST_IP HOST_PORT"
     """
     command = ['ssh', '-i', conn_info['ssh_key_path'], conn_info['conn']]
 
+    if conn_info.get('tunnel') and not no_tunnel:
+        command.insert(1, conn_info.get('tunnel'))
+        # Tunnel
+        command.insert(1, '-L')
+        # No shell
+        command.insert(1, '-N')
     if conn_info.get('proxy'):
         command.extend(_build_proxy_command(conn_info))
     if conn_info.get('extend'):
