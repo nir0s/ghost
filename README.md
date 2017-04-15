@@ -303,6 +303,8 @@ An added nicety is that you don't actually have to have key files stored on your
 
 Note that ghost will force you to provide the `conn` and one of `ssh_key` or `ssh_key_path` values when using the `--type=ssh` key type.
 
+### SSH Proxying
+
 You can also use a ProxyCommand based `ssh` method to connect to a machine through a proxy:
 
 ```bash
@@ -317,6 +319,17 @@ You can also use `proxy_key` to provide the string of the key instead of `ssh_ke
 
 Additionally, any string put under the `extend` value in the key will be concatenated to the resulting ssh command.
 
+### SSH Tunneling
+
+Using the `tunnel` key, you can create an ssh tunnel to a server (through a proxy, or not):
+
+```bash
+$ ghost put machine-through-proxy --type ssh conn=ubuntu@10.10.1.10 key_file_path=~/.ssh/key.pem tunnel='LOCAL_PORT:localhost:REMOTE_PORT'
+
+$ ghost ssh my-machine >/dev/null 2>&1 &
+...
+
+```
 
 ## Purging a stash
 
