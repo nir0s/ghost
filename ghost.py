@@ -173,10 +173,7 @@ class Stash(object):
             name='stored_passphrase',
             value={'passphrase': self.passphrase},
             lock=True)
-        self.put(
-            name='_last_modified_at',
-            value={'value': date},
-            lock=False)
+        self._storage.put({'name': '__last_modified_at__', 'value': date})
         return self.passphrase
 
     @property
@@ -388,7 +385,7 @@ class Stash(object):
              names_only=True):
         """Return a list of all keys.
         """
-        ignored_keys = ['stored_passphrase', '_last_modified_at']
+        ignored_keys = ['stored_passphrase', '__last_modified_at__']
         self._assert_valid_stash()
 
         key_list = [k for k in self._storage.list()
@@ -522,7 +519,7 @@ class Stash(object):
 
         return {
             'created_at': self._storage.get('stored_passphrase')['created_at'],
-            'modified_at': self._storage.get('_last_modified_at').get('value'),
+            'modified_at': self._storage.get('__last_modified_at__').get('value'),
             'key_count': keys,
             'type': self._storage.__class__.__name__,
             'stash_path': self._storage.db_path,
@@ -637,10 +634,10 @@ class Stash(object):
                     'Please provide the correct passphrase')
 
     def _update_modification_date(self, date=None):
-        key = self._storage.get('_last_modified_at')
-        self._storage.delete('_last_modified_at')
+        key = self._storage.get('__last_modified_at__')
+        self._storage.delete('__last_modified_at__')
         date = date or _get_current_time()
-        key['date'] = date
+        key['value'] = date
         self._storage.put(key)
 
 
