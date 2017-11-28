@@ -18,6 +18,6 @@ install:
     - pip install tox
     - pip install codecov
 script:
-    - tox -e $TOX_ENV
+    - make testone TOX_ENV="$TOX_ENV"
 after_success:
   - codecov

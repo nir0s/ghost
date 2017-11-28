@@ -15,6 +15,10 @@
 # Name of this package
 PACKAGENAME = ghost
 
+# Default tox env when running `make testone`
+TOX_ENV ?= py36
+
+
 .PHONY: help
 help:
 	@echo 'Please use "make <target>" where <target> is one of'
@@ -44,7 +48,7 @@ test:
 testone:
 	pip install 'tox>=1.7.2'
 	sed -i 's/iterations=1000000/iterations=100/g' ghost.py
-	tox -e py36
+	tox -e $(TOX_ENV)
 	sed -i 's/iterations=100/iterations=1000000/g' ghost.py
 	@echo "$@ done."
 
