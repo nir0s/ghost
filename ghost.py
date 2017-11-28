@@ -38,10 +38,11 @@ except ImportError:
     from urlparse import urljoin, urlparse
 
 import click
+import jinja2
 
 from tinydb import TinyDB, Query
-from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
@@ -109,6 +110,7 @@ KEY_FIELD_SCHEMA = {
     }
 }
 
+IGNORED_KEYS = ('stored_passphrase', '__last_modified_at__')
 PASSPHRASE_FILENAME = 'passphrase.ghost'
 
 POTENTIAL_PASSPHRASE_LOCATIONS = [
@@ -369,7 +371,7 @@ class Stash(object):
         self._assert_valid_stash()
 
         key_list = [k for k in self._storage.list()
-                    if k['name'] != 'stored_passphrase' and
+                    if k['name'] not in IGNORED_KEYS and
                     (k.get('lock') if locked_only else True)]
 
         if key_type:
@@ -422,6 +424,21 @@ class Stash(object):
 
         if not deleted:
             raise GhostError('Failed to delete {0}'.format(key_name))
+
+    def generate(self, template_path, output_path=None):
+        if template_path and not os.path.isfile(template_path):
+            raise GhostError('The file to generate from could not be found')
+        output_path = output_path or template_path + '.ghost-generated'
+
+        all_keys = {}
+        key_list = [k for k in self._storage.list()
+                    if k['name'] not in IGNORED_KEYS]
+        for key in key_list:
+            k = self.get(key['name'])['value']
+            all_keys[key['name']] = self.get(key['name'])['value']
+        generated_text = self._generate_from_template(template_path, all_keys)
+        with open(output_path, 'w') as output_file:
+            output_file.write(generated_text)
 
     def _change_lock_state(self, key_name, lock):
         self._assert_valid_stash()
@@ -578,6 +595,11 @@ class Stash(object):
                 raise GhostError(
                     'The passphrase provided is invalid for this stash. '
                     'Please provide the correct passphrase')
+
+    def _generate_from_template(self, template_path, value):
+        path, filename = os.path.split(template_path)
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(path or './'))
+        return env.get_template(filename).render(value)
 
 
 def migrate(src_path,
@@ -1160,13 +1182,13 @@ def _prettify_dict(key):
     assert isinstance(key, dict)
 
     pretty_key = ''
-    for key, value in key.items():
+    for kee, value in key.items():
         if isinstance(value, dict):
             pretty_value = ''
             for k, v in value.items():
                 pretty_value += '{0}={1};'.format(k, v)
             value = pretty_value
-        pretty_key += '{0:15}{1}\n'.format(key.title() + ':', value)
+        pretty_key += '{0:15}{1}\n'.format(kee.title() + ':', value)
     return pretty_key
 
 
@@ -1451,6 +1473,32 @@ def unlock_key(key_name,
     except GhostError as ex:
         sys.exit(ex)
 
+@main.command(name='generate', short_help='Generate file from template')
+@click.argument('TEMPLATE_PATH')
+@click.option('-o',
+              '--output-path',
+              type=click.STRING,
+              default=None,
+              help='Output path for the generated template')
+@stash_option
+@passphrase_option
+@backend_option
+def generate(template_path,
+             output_path,
+             stash,
+             passphrase,
+             backend):
+    """Generate a file from a Jinja template by injecting secrets from the
+    stash.
+    """
+    stash = _get_stash(backend, stash, passphrase)
+
+    try:
+        click.echo('Generating template...')
+        stash.generate(template_path, output_path)
+        click.echo('Generated!')
+    except GhostError as ex:
+        sys.exit(ex)
 
 @main.command(name='get', short_help='Retrieve a key')
 @click.argument('KEY_NAME')
