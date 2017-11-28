@@ -40,6 +40,14 @@ test:
 	sed -i 's/iterations=100/iterations=1000000/g' ghost.py
 	@echo "$@ done."
 
+.PHONY: testone
+testone:
+	pip install 'tox>=1.7.2'
+	sed -i 's/iterations=1000000/iterations=100/g' ghost.py
+	tox -e py36
+	sed -i 's/iterations=100/iterations=1000000/g' ghost.py
+	@echo "$@ done."
+
 .PHONY: clean
 clean:
 	rm -rf dist build $(PACKAGENAME).egg-info

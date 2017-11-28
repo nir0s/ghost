@@ -26,7 +26,9 @@ import pytest
 import click.testing as clicktest
 
 import hvac  # NOQA
+import botocore
 import elasticsearch  # NOQA
+from moto import mock_s3
 from sqlalchemy import sql
 from sqlalchemy import inspect
 from sqlalchemy import create_engine
@@ -837,6 +839,137 @@ class TestElasticsearchStorage:
     @mock.patch('elasticsearch.Elasticsearch', ElasticsearchClient)
     def test_list(self):
         storage = ghost.ElasticsearchStorage()
+        storage.put(BASE_TEST_KEY)
+        key_list = storage.list()
+        assert len(key_list) == 1
+        assert key_list[0] == BASE_TEST_KEY
+        storage_tester.list(key_list)
+
+
+class TestS3Storage():
+    class MockClient(object):
+        def __init__(self, response, raise_create_bucket=False,
+                     raise_head_bucket=False, raise_get_object=False):
+            self.response = response
+            self.raise_flags = {
+                'create_bucket': raise_create_bucket,
+                'head_bucket': raise_head_bucket,
+                'get_object': raise_get_object}
+
+        def create_bucket(self, **kwargs):
+            if self.raise_flags['create_bucket']:
+                raise botocore.exceptions.ClientError(self.response,
+                                                      'some_operation')
+
+        def head_bucket(self, **kwargs):
+            if self.raise_flags['head_bucket']:
+                raise botocore.exceptions.ClientError(self.response,
+                                                      'some_operation')
+
+        def get_object(self, **kwargs):
+            if self.raise_flags['get_object']:
+                raise botocore.exceptions.ClientError(self.response,
+                                                      'some_operation')
+
+        def client(self, *args):
+            return self
+
+    def test_missing_requirement(self):
+        with mock.patch('ghost.S3_EXISTS', False):
+            with pytest.raises(ImportError):
+                ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+
+    def test_missing_bucket_location(self):
+        with pytest.raises(ghost.GhostError):
+            ghost.S3Storage('bucket_name')
+
+    @mock_s3
+    def test_is_initialized(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        # Init initiated
+        assert storage.is_initialized is False
+        storage.init()
+        assert storage.is_initialized is True
+        storage_tester.is_initialized(storage.is_initialized)
+
+    def test_is_initialized_raises_error(self):
+        with mock.patch('boto3.Session') as sessions_mock:
+            sessions_mock.return_value = self.MockClient(
+                {'Error': {'Code': 'Something_else'}},
+                raise_head_bucket=True)
+            with pytest.raises(botocore.exceptions.ClientError):
+                storage = ghost.S3Storage('bucket_name',
+                                          bucket_location='us-east-1')
+                storage.init()
+                storage.is_initialized()
+
+    @mock_s3
+    def test_init(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        storage.init()
+        # If no errors are thrown, head bucket response is 200
+        assert storage.client.head_bucket(
+            Bucket='bucket_name')['ResponseMetadata']['HTTPStatusCode'] == 200
+        try:
+            storage.init()
+        except botocore.exceptions.ClientError:
+            pytest.fail('Operation should be idempotent')
+
+    def test_init_raises_error(self):
+        with mock.patch('boto3.Session') as sessions_mock:
+            sessions_mock.return_value = self.MockClient(
+                {'Error': {'Code': 'Something_else'}},
+                raise_create_bucket=True)
+            with pytest.raises(botocore.exceptions.ClientError):
+                storage = ghost.S3Storage('bucket_name',
+                                          bucket_location='us-east-1')
+                storage.init()
+
+    @mock_s3
+    def test_put_get_delete(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        storage.init()
+        key_id = storage.put(BASE_TEST_KEY)
+        storage_tester.put(key_id)
+        retrieved_key = storage.get(BASE_TEST_KEY['name'])
+        assert BASE_TEST_KEY == retrieved_key
+        storage_tester.get(retrieved_key)
+
+        result = storage.delete(BASE_TEST_KEY['name'])
+        storage_tester.delete(result)
+
+        key = storage.get(BASE_TEST_KEY['name'])
+        storage_tester.get_nonexisting_key(key)
+
+    def test_get_raises_error(self):
+        with mock.patch('boto3.Session') as sessions_mock:
+            config = {'db_path': 'bucket_name',
+                      'bucket_location': 'us-east-1'}
+            sessions_mock.return_value = self.MockClient(
+                {'Error': {'Code': 'Something_else'}},
+                raise_get_object=True)
+            with pytest.raises(botocore.exceptions.ClientError):
+                storage = ghost.S3Storage(**config)
+                storage.init()
+                storage.get('key_name')
+
+    @mock_s3
+    def test_delete_non_existing_key(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        storage.init()
+        assert storage.delete('non_existing_key') is True
+
+    @mock_s3
+    def test_empty_list(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        storage.init()
+        key_list = storage.list()
+        storage_tester.empty_list(key_list)
+
+    @mock_s3
+    def test_list(self):
+        storage = ghost.S3Storage('bucket_name', bucket_location='us-east-1')
+        storage.init()
         storage.put(BASE_TEST_KEY)
         key_list = storage.list()
         assert len(key_list) == 1
