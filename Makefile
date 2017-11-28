@@ -35,7 +35,9 @@ release: test clean build publish
 .PHONY: test
 test:
 	pip install 'tox>=1.7.2'
+	sed -i 's/iterations=1000000/iterations=100/g' ghost.py
 	tox
+	sed -i 's/iterations=100/iterations=1000000/g' ghost.py
 	@echo "$@ done."
 
 .PHONY: clean
