@@ -98,8 +98,8 @@ AUDIT_LOG_FILE_PATH = os.environ.get(
 
 KEY_FIELD_SCHEMA = {
     'ssh': {
-        'requires': ['conn'],
-        'oneof': [['ssh_key_path', 'ssh_key']],
+        'requires': [],
+        'oneof': [['ssh_key_path', 'ssh_key'], ['conn', 'discover']],
     },
     'secret': {
         'requires': [],
@@ -1213,6 +1213,30 @@ def _write_passphrase_file(passphrase):
         passphrase_file.write(passphrase)
 
 
+def _list_instances_by_tag_value(conn):
+    # When passed a tag key, tag value this will return a list of InstanceIds that were found.
+
+    session = boto3.Session(
+        aws_access_key_id=conn.get('aws_access_key_id'),
+        aws_secret_access_key=conn.get('aws_secret_access_key'),
+        profile_name=conn.get('profile'),
+        region_name=conn.get('region'))
+    ec2client = session.client('ec2')
+    response = ec2client.describe_instances(
+        Filters=[
+            {
+                'Name': 'tag:' + conn.get('tag_key'),
+                'Values': [conn.get('tag_value')]
+            }
+        ]
+    )
+    instancelist = []
+    for reservation in (response["Reservations"]):
+        for instance in reservation["Instances"]:
+            instancelist.append(instance["PrivateIpAddress"])
+    return instancelist
+
+
 CLICK_CONTEXT_SETTINGS = dict(
     help_option_names=['-h', '--help'],
     token_normalize_func=lambda param: param.lower())
@@ -1754,6 +1778,15 @@ def ssh(key_name, no_tunnel, stash, passphrase, backend):
         proxy_id_file = _write_tmp(proxy_key) if proxy_key else proxy_key_path
         conn_info['proxy_key_path'] = proxy_id_file
 
+    if conn_info.get('conn'):
+        conn = conn_info['conn']
+    elif conn_info.get('discover') and conn_info.get('discover') == 'aws':
+        instances = _list_instances_by_tag_value(conn_info)
+        if not instances:
+            sys.exit('No instances found.')
+        conn = conn_info['username'] + '@' + random.choice(instances)
+        conn_info['conn'] = conn
+
     ssh_command = _build_ssh_command(conn_info, no_tunnel)
     try:
         execute(ssh_command)
@@ -1774,6 +1807,7 @@ def _build_proxy_command(conn_info):
     proxy_key_path = conn_info.get('proxy_key_path')
 
     conn = conn_info['conn']
+
     _, _host = conn.split('@')
     hp = _host.split(':')
     host, port = (hp[0], hp[1]) if len(hp) == 2 else (hp[0], '22')
