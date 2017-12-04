@@ -104,7 +104,7 @@ AUDIT_LOG_FILE_PATH = os.environ.get(
 KEY_FIELD_SCHEMA = {
     'ssh': {
         'requires': [],
-        'oneof': [['ssh_key_path', 'ssh_key'], ['conn', 'discover']],
+        'oneof': [['ssh_key_path', 'ssh_key'], ['conn', 'provider']],
     },
     'secret': {
         'requires': [],
@@ -1785,8 +1785,8 @@ def ssh(key_name, no_tunnel, stash, passphrase, backend):
 
     if conn_info.get('conn'):
         conn = conn_info['conn']
-    elif conn_info.get('discover') and conn_info.get('discover') == 'aws':
-        instances = discover.nodes(conn_info.get('discover'), **conn_info)
+    elif conn_info.get('provider') and conn_info.get('provider') == 'aws':
+        instances = discover.nodes(**conn_info)
         if not instances:
             sys.exit('No instances found.')
         conn = conn_info['username'] + '@' + random.choice(instances)
