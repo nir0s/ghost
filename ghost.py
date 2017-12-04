@@ -83,6 +83,11 @@ try:
 except ImportError:
     S3_EXISTS = False
 
+try:
+    import discover
+except ImportError:
+    pass
+
 
 GHOST_HOME = os.path.join(os.path.expanduser('~'), '.ghost')
 STORAGE_DEFAULT_PATH_MAPPING = {
@@ -1213,28 +1218,28 @@ def _write_passphrase_file(passphrase):
         passphrase_file.write(passphrase)
 
 
-def _list_instances_by_tag_value(conn):
-    # When passed a tag key, tag value this will return a list of InstanceIds that were found.
+# def _list_instances_by_tag_value(conn):
+#     # When passed a tag key, tag value this will return a list of InstanceIds that were found.
 
-    session = boto3.Session(
-        aws_access_key_id=conn.get('aws_access_key_id'),
-        aws_secret_access_key=conn.get('aws_secret_access_key'),
-        profile_name=conn.get('profile'),
-        region_name=conn.get('region'))
-    ec2client = session.client('ec2')
-    response = ec2client.describe_instances(
-        Filters=[
-            {
-                'Name': 'tag:' + conn.get('tag_key'),
-                'Values': [conn.get('tag_value')]
-            }
-        ]
-    )
-    instancelist = []
-    for reservation in (response["Reservations"]):
-        for instance in reservation["Instances"]:
-            instancelist.append(instance["PrivateIpAddress"])
-    return instancelist
+#     session = boto3.Session(
+#         aws_access_key_id=conn.get('aws_access_key_id'),
+#         aws_secret_access_key=conn.get('aws_secret_access_key'),
+#         profile_name=conn.get('profile'),
+#         region_name=conn.get('region'))
+#     ec2client = session.client('ec2')
+#     response = ec2client.describe_instances(
+#         Filters=[
+#             {
+#                 'Name': 'tag:' + conn.get('tag_key'),
+#                 'Values': [conn.get('tag_value')]
+#             }
+#         ]
+#     )
+#     instancelist = []
+#     for reservation in (response["Reservations"]):
+#         for instance in reservation["Instances"]:
+#             instancelist.append(instance["PrivateIpAddress"])
+#     return instancelist
 
 
 CLICK_CONTEXT_SETTINGS = dict(
@@ -1781,7 +1786,7 @@ def ssh(key_name, no_tunnel, stash, passphrase, backend):
     if conn_info.get('conn'):
         conn = conn_info['conn']
     elif conn_info.get('discover') and conn_info.get('discover') == 'aws':
-        instances = _list_instances_by_tag_value(conn_info)
+        instances = discover.nodes(conn_info.get('discover'), **conn_info)
         if not instances:
             sys.exit('No instances found.')
         conn = conn_info['username'] + '@' + random.choice(instances)
