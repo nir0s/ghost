@@ -74,6 +74,35 @@ Commands:
   ssh      Use a key to SSH-connect to a machine
   unlock   Unlock a key
 
+----- (Optional) -----
+
+# Initializing a stash with a tutorial
+$ ghost init --tutorial
+Stash: tinydb at ~/.ghost/ghost.json
+Initializing stash...
+Initialized stash at: ~/.ghost/ghost.json
+Your passphrase can be found under the `passphrase.ghost` file in the current directory.
+Make sure you save your passphrase somewhere safe. If lost, you will lose access to your stash.
+TUTORIAL: 
+For your convenience we've stored an example key named 'example'. Usually this is done with 'ghost put example first_key=first_value [second_key=second_value [...]]'. You may retrieve it with 'ghost get example'. You may also delete it with 'ghost delete example'.
+
+$ export GHOST_PASSPHRASE=$(cat passphrase.ghost)
+
+$ ghost get example
+Stash: tinydb at ~/.ghost/ghost.json
+Retrieving key...
+
+Description:   This is the key description
+Lock:          False
+Created_At:    2017-05-29 13:49:56
+Modified_At:   2017-05-29 13:49:56
+Value:         key=value;
+Uid:           f7e236f7-450c-400b-9328-95e18d5fac52
+Metadata:      some_key=some_value;
+Type:          secret
+Name:          example
+
+----- (Optional) -----
 
 # Initializing a stash
 $ ghost init

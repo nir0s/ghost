@@ -50,6 +50,13 @@ def _invoke(command):
     return cfy.invoke(getattr(ghost, func), params)
 
 
+def _make_temp_passphrase_file():
+    fd, temp_file_path = tempfile.mkstemp()
+    os.close(fd)
+    os.remove(temp_file_path)
+    return temp_file_path
+
+
 class TestGeneral:
     def test_get_current_time(self):
         assert len(ghost._get_current_time()) == 19
@@ -110,12 +117,6 @@ class TestGeneral:
             ghost._prettify_list('')
 
     def test_get_passphrase(self):
-        def _make_temp_passphrase_file():
-            fd, temp_file_path = tempfile.mkstemp()
-            os.close(fd)
-            os.remove(temp_file_path)
-            return temp_file_path
-
         tempfile1 = _make_temp_passphrase_file()
         tempfile2 = _make_temp_passphrase_file()
 
@@ -995,6 +996,13 @@ def assert_stash_initialized(stash_path):
     assert len(db) == 1
 
 
+def assert_stash_initialized_tutorial(stash_path):
+    db = get_tinydb(stash_path)
+    assert '2' in db
+    assert db['2']['name'] == 'example'
+    assert len(db) == 2
+
+
 def assert_key_put(db, dont_verify_value=False):
     key = db['2']
     assert key['name'] == 'aws'
@@ -1326,6 +1334,36 @@ class TestStash:
         assert len(result) == 1
         assert 'aws-2' in result
 
+    def test_is_initialized_passphrase_overridden(self):
+        prev_dir = os.getcwd()
+        stash_dir = tempfile.mkdtemp()
+        os.chdir(stash_dir)
+        stash_path = os.path.join(stash_dir, 'stash.json')
+        try:
+            tempfile1 = _make_temp_passphrase_file()
+
+            passphrase = '123'
+            ghost.POTENTIAL_PASSPHRASE_LOCATIONS = [tempfile1]
+            with open(ghost.POTENTIAL_PASSPHRASE_LOCATIONS[0], 'w') \
+                    as passphrase_file:
+                passphrase_file.write(passphrase)
+
+            storage = ghost.TinyDBStorage(stash_path)
+            stash = ghost.Stash(storage, 'some_passphrase')
+            stash.init()
+            stash.is_initialized
+            assert stash.passphrase == 'some_passphrase'
+            stash.passphrase = None
+            try:
+                stash.is_initialized
+            except ghost.GhostError:
+                pass
+            assert stash.passphrase == passphrase
+        finally:
+            os.remove(ghost.POTENTIAL_PASSPHRASE_LOCATIONS[0])
+            os.chdir(prev_dir)
+            shutil.rmtree(stash_dir, ignore_errors=True)
+
 
 def _create_migration_env(test_stash, temp_file_path):
         test_stash.put('aws', {'a': 'b'})
@@ -1360,7 +1398,7 @@ def test_cli_stash(stash_path):
     os.close(fd)
     os.remove(passphrase_file_path)
     ghost.PASSPHRASE_FILENAME = passphrase_file_path
-    _invoke('init_stash "{0}"'.format(stash_path))
+    _invoke('init_stash -s "{0}"'.format(stash_path))
     os.environ['GHOST_STASH_PATH'] = stash_path
     with open(passphrase_file_path) as passphrase_file:
         passphrase = passphrase_file.read()
@@ -1404,7 +1442,7 @@ class TestCLI:
         assert_stash_initialized(test_cli_stash._storage.db_path)
 
     def test_init_already_initialized(self, test_cli_stash):
-        result = _invoke('init_stash "{0}" -p {1}'.format(
+        result = _invoke('init_stash -s "{0}" -p {1}'.format(
             os.environ['GHOST_STASH_PATH'], test_cli_stash.passphrase))
         assert 'Stash already initialized' in result.output
         assert result.exit_code == 0
@@ -1415,7 +1453,7 @@ class TestCLI:
         fd, temp_file = tempfile.mkstemp()
         os.close(fd)
         os.remove(temp_file)
-        result = _invoke('init_stash "{0}" -p whatever'.format(temp_file))
+        result = _invoke('init_stash -s "{0}" -p whatever'.format(temp_file))
         assert 'Expected OSError' in str(result.exception)
         assert 'Removing stale stash and passphrase' in str(result.output)
         assert type(result.exception) == SystemExit
@@ -1428,7 +1466,7 @@ class TestCLI:
 
     @pytest.mark.skipif(os.name == 'nt', reason='Irrelevant on Windows')
     def test_init_permission_denied_on_stash(self, test_cli_stash):
-        result = _invoke('init_stash "/x" -p {0}'.format(
+        result = _invoke('init_stash -s "/x" -p {0}'.format(
             test_cli_stash.passphrase))
         assert 'Permission denied' in str(result.exception)
         assert type(result.exception) == SystemExit
@@ -1642,8 +1680,8 @@ class TestCLI:
     def test_fail_init_two_stashes_passphrase_file_exists(self,
                                                           stash_path,
                                                           temp_file_path):
-        _invoke('init_stash "{0}"'.format(stash_path))
-        result = _invoke('init_stash "{0}" -b sqlalchemy'.format(
+        _invoke('init_stash -s "{0}"'.format(stash_path))
+        result = _invoke('init_stash -s "{0}" -b sqlalchemy'.format(
             temp_file_path))
 
         assert 'Overwriting might prevent you' in result.output
@@ -1786,6 +1824,10 @@ class TestCLI:
         expected_command = \
             'ssh -i /path/to/key ubuntu@10.10.1.10 -o Key="Value"'
         assert expected_command in str(result.exception)
+
+    def test_tutorial(self, stash_path):
+        _invoke('init_stash -s "{0}" -t'.format(stash_path))
+        assert_stash_initialized_tutorial(stash_path)
 
 
 class TestMultiStash:
